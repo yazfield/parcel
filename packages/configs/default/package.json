@@ -43,5 +43,9 @@
     "@parcel/transformer-toml": "^2.0.0-alpha.2.1",
     "@parcel/transformer-typescript-types": "^2.0.0-alpha.2.1",
     "@parcel/transformer-yaml": "^2.0.0-alpha.2.1"
+  },
+  "devDependencies": {
+    "@parcel/transformer-typescript-types": "^2.0.0-alpha.2",
+    "typescript": "^3.0.0"
   }
 }

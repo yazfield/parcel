@@ -139,11 +139,9 @@ export type DependencyNode = {|
   value: Dependency
 |};
 
-export type FileNode = {|id: string, +type: 'file', value: File|};
-export type GlobNode = {|id: string, +type: 'glob', value: Glob|};
 export type RootNode = {|id: string, +type: 'root', value: string | null|};
 
-export type AssetRequest = {|
+export type AssetRequestDesc = {|
   filePath: FilePath,
   env: Environment,
   sideEffects?: boolean,
@@ -151,8 +149,12 @@ export type AssetRequest = {|
   pipeline?: ?string
 |};
 
+export type AssetRequestResult = {|
+  assets: Array<Asset>,
+  configRequests: Array<ConfigRequestDesc>
+|};
 // Asset group nodes are essentially used as placeholders for the results of an asset request
-export type AssetGroup = AssetRequest;
+export type AssetGroup = AssetRequestDesc;
 export type AssetGroupNode = {|
   id: string,
   +type: 'asset_group',
@@ -169,7 +171,7 @@ export type DepPathRequestNode = {|
 export type AssetRequestNode = {|
   id: string,
   +type: 'asset_request',
-  value: AssetRequest
+  value: AssetRequestDesc
 |};
 
 export type EntrySpecifierNode = {|
@@ -204,7 +206,7 @@ export type BundleGraphNode =
 export type ConfigRequestNode = {|
   id: string,
   +type: 'config_request',
-  value: ConfigRequest
+  value: ConfigRequestDesc
 |};
 
 export type Config = {|
@@ -223,7 +225,7 @@ export type Config = {|
   shouldInvalidateOnStartup: boolean
 |};
 
-export type ConfigRequest = {|
+export type ConfigRequestDesc = {|
   filePath: FilePath,
   env: Environment,
   isSource: boolean,
@@ -237,10 +239,10 @@ export type ConfigRequest = {|
 export type DepVersionRequestNode = {|
   id: string,
   +type: 'dep_version_request',
-  value: DepVersionRequest
+  value: DepVersionRequestDesc
 |};
 
-export type DepVersionRequest = {|
+export type DepVersionRequestDesc = {|
   moduleSpecifier: PackageName,
   resolveFrom: FilePath,
   result?: Semver
@@ -262,16 +264,6 @@ export type TargetRequestNode = {|
   +type: 'target_request',
   value: FilePath
 |};
-
-export type RequestGraphNode = RequestNode | FileNode | GlobNode;
-export type RequestNode =
-  | EntryRequestNode
-  | TargetRequestNode
-  | DepPathRequestNode
-  | AssetRequestNode
-  | ConfigRequestNode
-  | DepVersionRequestNode;
-export type SubRequestNode = ConfigRequestNode | DepVersionRequestNode;
 
 export type CacheEntry = {|
   filePath: FilePath,
@@ -308,15 +300,15 @@ export type BundleGroupNode = {|
 |};
 
 export type TransformationOpts = {|
-  request: AssetRequest,
-  loadConfig: (ConfigRequest, NodeId) => Promise<Config>,
+  request: AssetRequestDesc,
+  loadConfig: (ConfigRequestDesc, NodeId) => Promise<Config>,
   parentNodeId: NodeId,
   options: ParcelOptions
 |};
 
 export type ValidationOpts = {|
-  request: AssetRequest,
-  loadConfig: (ConfigRequest, NodeId) => Promise<Config>,
+  request: AssetRequestDesc,
+  loadConfig: (ConfigRequestDesc, NodeId) => Promise<Config>,
   parentNodeId: NodeId,
   options: ParcelOptions
 |};

@@ -2,24 +2,38 @@
 
 import type WorkerFarm from '@parcel/workers';
 import type {Event} from '@parcel/watcher';
-import type {FilePath} from '@parcel/types';
 import type {
   Asset,
   AssetGraphNode,
-  AssetRequest,
-  AssetRequestNode,
-  DepPathRequestNode,
+  AssetRequestDesc,
+  AssetRequestResult,
+  Config,
+  ConfigRequestDesc,
   ParcelOptions,
-  Target
+  Target,
+  TransformationOpts
 } from './types';
 
 import EventEmitter from 'events';
 import {md5FromObject, md5FromString} from '@parcel/utils';
+import nullthrows from 'nullthrows';
 
 import AssetGraph from './AssetGraph';
 import type ParcelConfig from './ParcelConfig';
 import RequestGraph from './RequestGraph';
 import {PARCEL_VERSION} from './constants';
+import {
+  generateRequestId,
+  EntryRequest,
+  TargetRequest,
+  AssetRequest,
+  DepPathRequest
+} from './requests';
+import ResolverRunner from './ResolverRunner';
+import {EntryResolver} from './EntryResolver';
+import TargetResolver from './TargetResolver';
+import ConfigLoader from './ConfigLoader';
+import {addDevDependency} from './InternalConfig';
 
 import dumpToGraphViz from './dumpGraphToGraphViz';
 import path from 'path';
@@ -29,17 +43,29 @@ type Opts = {|
   config: ParcelConfig,
   name: string,
   entries?: Array<string>,
-  targets?: Array<Target>,
-  assetRequests?: Array<AssetRequest>,
+  targets?: Array<Target>, // ? Is this still used?
+  assetRequests?: Array<AssetRequestDesc>,
   workerFarm: WorkerFarm
 |};
 
+type AssetGraphBuilderRequest =
+  | EntryRequest
+  | TargetRequest
+  | AssetRequest
+  | DepPathRequest;
+
 export default class AssetGraphBuilder extends EventEmitter {
   assetGraph: AssetGraph;
-  requestGraph: RequestGraph;
+  requestGraph: RequestGraph<AssetGraphBuilderRequest>;
   changedAssets: Map<string, Asset> = new Map();
   options: ParcelOptions;
   cacheKey: string;
+  loadConfigHandle: () => Promise<Config>;
+  entryResolver: EntryResolver;
+  targetResolver: TargetResolver;
+  resolverRunner: ResolverRunner;
+  configLoader: ConfigLoader;
+  runTransform: TransformationOpts => Promise<AssetRequestResult>;
 
   async init({
     config,
@@ -72,12 +98,25 @@ export default class AssetGraphBuilder extends EventEmitter {
     this.requestGraph.initOptions({
       config,
       options,
-      onEntryRequestComplete: this.handleCompletedEntryRequest.bind(this),
-      onTargetRequestComplete: this.handleCompletedTargetRequest.bind(this),
-      onAssetRequestComplete: this.handleCompletedAssetRequest.bind(this),
-      onDepPathRequestComplete: this.handleCompletedDepPathRequest.bind(this),
+      onRequestComplete: this.handleCompletedRequest.bind(this),
       workerFarm
     });
+
+    this.entryResolver = new EntryResolver(this.options);
+    this.targetResolver = new TargetResolver(this.options);
+
+    this.resolverRunner = new ResolverRunner({
+      config,
+      options
+    });
+
+    this.runTransform = workerFarm.createHandle('runTransform');
+    //this.runValidate = workerFarm.createHandle('runValidate');
+    // $FlowFixMe
+    this.loadConfigHandle = workerFarm.createReverseHandle(
+      this.loadConfig.bind(this)
+    );
+    this.configLoader = new ConfigLoader(options);
 
     if (changes) {
       this.requestGraph.invalidateUnpredictableNodes();
@@ -109,19 +148,55 @@ export default class AssetGraphBuilder extends EventEmitter {
     return this.requestGraph.completeValidations();
   }
 
+  // NOTE: not adding config and dep version requests to graph in middle of refactor
+  async loadConfig(configRequest: ConfigRequestDesc) {
+    let config = await this.configLoader.load(configRequest);
+
+    for (let [moduleSpecifier, version] of config.devDeps) {
+      if (version == null) {
+        let {pkg} = await this.options.packageManager.resolve(
+          `${moduleSpecifier}/package.json`,
+          `${config.resolvedPath}/index`
+        );
+
+        // TODO: Figure out how to handle when local plugin packages change, since version won't be enough
+        version = nullthrows(pkg).version;
+        addDevDependency(config, moduleSpecifier, version);
+      }
+    }
+
+    return config;
+  }
+
   handleNodeAddedToAssetGraph(node: AssetGraphNode) {
+    let request;
     switch (node.type) {
-      case 'entry_specifier':
-        this.requestGraph.addEntryRequest(node.value);
+      case 'entry_specifier': {
+        request = new EntryRequest({
+          request: node.value,
+          entryResolver: this.entryResolver
+        });
         break;
+      }
       case 'entry_file':
-        this.requestGraph.addTargetRequest(node.value);
+        request = new TargetRequest({
+          request: node.value,
+          targetResolver: this.targetResolver
+        });
         break;
       case 'dependency':
-        this.requestGraph.addDepPathRequest(node.value);
+        request = new DepPathRequest({
+          request: node.value,
+          resolverRunner: this.resolverRunner
+        });
         break;
       case 'asset_group':
-        this.requestGraph.addAssetRequest(node.id, node.value);
+        request = new AssetRequest({
+          request: node.value,
+          runTransform: this.runTransform,
+          loadConfig: this.loadConfigHandle,
+          options: this.options
+        });
         break;
       case 'asset': {
         let asset = node.value;
@@ -129,46 +204,52 @@ export default class AssetGraphBuilder extends EventEmitter {
         break;
       }
     }
+
+    if (request) {
+      this.requestGraph.addRequest(request);
+    }
   }
 
   handleNodeRemovedFromAssetGraph(node: AssetGraphNode) {
+    let removeId;
     switch (node.type) {
       case 'dependency':
+        removeId = generateRequestId('dep_path_request', node.value);
+        break;
       case 'asset_group':
-        this.requestGraph.removeById(node.id);
+        removeId = generateRequestId('asset_request', node.value);
         break;
+
       case 'entry_specifier':
-        this.requestGraph.removeById('entry_request:' + node.value);
+        removeId = generateRequestId('entry_request', node.value);
         break;
+
       case 'entry_file':
-        this.requestGraph.removeById('target_request:' + node.value);
+        removeId = generateRequestId('target_request', node.value);
         break;
     }
-  }
 
-  handleCompletedEntryRequest(entry: string, resolved: Array<FilePath>) {
-    this.assetGraph.resolveEntry(entry, resolved);
-  }
-
-  handleCompletedTargetRequest(entryFile: FilePath, targets: Array<Target>) {
-    this.assetGraph.resolveTargets(entryFile, targets);
-  }
-
-  handleCompletedAssetRequest(
-    requestNode: AssetRequestNode,
-    assets: Array<Asset>
-  ) {
-    this.assetGraph.resolveAssetGroup(requestNode.value, assets);
-    for (let asset of assets) {
-      this.changedAssets.set(asset.id, asset); // ? Is this right?
+    if (removeId != null) {
+      this.requestGraph.removeById(removeId);
     }
   }
 
-  handleCompletedDepPathRequest(
-    requestNode: DepPathRequestNode,
-    result: AssetRequest | null
-  ) {
-    this.assetGraph.resolveDependency(requestNode.value, result);
+  handleCompletedRequest(request: AssetGraphBuilderRequest) {
+    if (request instanceof EntryRequest) {
+      this.assetGraph.resolveEntry(request.request, request.result.entries);
+    } else if (request instanceof TargetRequest) {
+      this.assetGraph.resolveTargets(request.request, request.result.targets);
+    } else if (request instanceof AssetRequest) {
+      let {assets} = request.result;
+      this.assetGraph.resolveAssetGroup(request.request, assets);
+      for (let asset of assets) {
+        this.changedAssets.set(asset.id, asset); // ? Is this right?
+      }
+    } else if (request instanceof DepPathRequest) {
+      if (request.result != null) {
+        this.assetGraph.resolveDependency(request.request, request.result);
+      }
+    }
   }
 
   respondToFSEvents(events: Array<Event>) {
