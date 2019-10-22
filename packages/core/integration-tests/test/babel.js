@@ -404,8 +404,9 @@ describe('babel', function() {
       assert(distFile.includes('something different'));
     });
 
-    // ? Why is this not failing?
     it('should invalidate babel.config.js across runs', async function() {
+      // This test is only passing because the graphs are not being reused, manually fail for now
+      assert(false);
       let dateRe = /return (\d+);/;
 
       let fixtureDir = path.join(__dirname, '/integration/babel-config-js');
@@ -446,8 +447,9 @@ describe('babel', function() {
       assert.notEqual(firstDatestamp, secondDatestamp);
     });
 
-    // ? Why is this not failing?
-    it('should invalidate when babel plugins are upgraded across runs', async function() {
+    it.only('should invalidate when babel plugins are upgraded across runs', async function() {
+      // This test is only passing because the graphs are not being reused, manually fail for now
+      assert(false);
       let fixtureDir = path.join(
         __dirname,
         '/integration/babel-plugin-upgrade'
