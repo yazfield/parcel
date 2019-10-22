@@ -1,5 +1,6 @@
 // @flow strict-local
 
+import type {AbortSignal} from 'abortcontroller-polyfill/dist/cjs-ponyfill';
 import type {FilePath, Glob} from '@parcel/types';
 import type {Event} from '@parcel/watcher';
 import type {ParcelOptions} from './types';
@@ -69,9 +70,9 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
   RequestGraphNode,
   RequestGraphEdgeType
 > {
-  // $FlowFixMe
-  inProgress: Map<NodeId, Promise<any>> = new Map();
+  signal: ?AbortSignal;
   invalidNodeIds: Set<NodeId> = new Set();
+  incompleteNodeIds: Set<NodeId> = new Set();
   runValidate: ValidationOpts => Promise<void>;
   onRequestComplete: (request: TRequest) => mixed;
   queue: PromiseQueue<mixed>;
@@ -102,8 +103,7 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
       ...super.serialize(),
       invalidNodeIds: this.invalidNodeIds,
       globNodeIds: this.globNodeIds,
-      unpredicatableNodeIds: this.unpredicatableNodeIds,
-      depVersionRequestNodeIds: this.depVersionRequestNodeIds
+      unpredicatableNodeIds: this.unpredicatableNodeIds
     };
   }
 
@@ -126,12 +126,23 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
     }
 
     await this.queue.run();
+
+    for (let id of this.incompleteNodeIds) {
+      let node = nullthrows(this.getNode(id));
+      this.processRequestNode(node);
+    }
+
+    await this.queue.run();
   }
 
   addNode(node: RequestGraphNode) {
     if (!this.hasNode(node.id)) {
       if (node.type === 'request') {
-        this.processRequestNode(node);
+        this.incompleteNodeIds.add(node.id);
+        let isInvalidationPhase = this.invalidNodeIds.size > 0;
+        if (!isInvalidationPhase) {
+          this.processRequestNode(node);
+        }
       }
 
       if (node.type === 'glob') {
@@ -179,6 +190,7 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
         request.addResultToGraph(requestNode, result, this);
 
         this.invalidNodeIds.delete(requestNode.id);
+        this.incompleteNodeIds.delete(requestNode.id);
 
         // ? What should happen if this fails
         this.onRequestComplete(request);
@@ -277,7 +289,7 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
     }
   }
 
-  invalidateOnFileCreate(requestNode: RequestNode, glob) {
+  invalidateOnFileCreate(requestNode: RequestNode, glob: Glob) {
     let globNode = nodeFromGlob(glob);
     if (!this.hasNode(globNode.id)) {
       this.addNode(globNode);

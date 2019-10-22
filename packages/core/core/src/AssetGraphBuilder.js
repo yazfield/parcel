@@ -1,5 +1,6 @@
 // @flow strict-local
 
+import type {AbortSignal} from 'abortcontroller-polyfill/dist/cjs-ponyfill';
 import type WorkerFarm from '@parcel/workers';
 import type {Event} from '@parcel/watcher';
 import type {
@@ -129,7 +130,9 @@ export default class AssetGraphBuilder extends EventEmitter {
     }
   }
 
-  async build(): Promise<{|
+  async build(
+    signal?: AbortSignal
+  ): Promise<{|
     assetGraph: AssetGraph,
     changedAssets: Map<string, Asset>
   |}> {

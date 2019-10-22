@@ -447,7 +447,7 @@ describe('babel', function() {
       assert.notEqual(firstDatestamp, secondDatestamp);
     });
 
-    it.only('should invalidate when babel plugins are upgraded across runs', async function() {
+    it('should invalidate when babel plugins are upgraded across runs', async function() {
       // This test is only passing because the graphs are not being reused, manually fail for now
       assert(false);
       let fixtureDir = path.join(
