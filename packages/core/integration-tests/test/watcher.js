@@ -48,6 +48,7 @@ describe('watcher', function() {
     assert.equal(output(), 10);
   });
 
+  // TODO
   it('should rebuild on a config file change', async function() {
     await ncp(path.join(__dirname, 'integration/custom-config'), inputDir);
     await ncp(

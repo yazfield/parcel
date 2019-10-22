@@ -81,6 +81,7 @@ function resolvePathPlugin({asset, resolve}) {
 
         async loadFile(rawFilename, ...args) {
           let filename = rawFilename;
+
           if (WEBPACK_ALIAS_RE.test(filename)) {
             let correctPath = filename.replace(/^~/, '');
             throw new Error(

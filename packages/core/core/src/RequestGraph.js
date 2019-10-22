@@ -185,8 +185,10 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
 
         return result;
       })
-      .catch(e => {
-        // blah
+      .catch(() => {
+        // Do nothing
+        // This is catching a promise wrapped around the promise returning function.
+        // The promise queue will still reject
       });
   }
 
@@ -253,7 +255,7 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
   //   return parentNode;
   // }
 
-  invalidateOnFileUpdate(requestNode, filePath) {
+  invalidateOnFileUpdate(requestNode: RequestNode, filePath: FilePath) {
     let fileNode = nodeFromFilePath(filePath);
     if (!this.hasNode(fileNode.id)) {
       this.addNode(fileNode);
@@ -264,7 +266,7 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
     }
   }
 
-  invalidateOnFileDelete(requestNode, filePath) {
+  invalidateOnFileDelete(requestNode: RequestNode, filePath: FilePath) {
     let fileNode = nodeFromFilePath(filePath);
     if (!this.hasNode(fileNode.id)) {
       this.addNode(fileNode);
@@ -275,7 +277,7 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
     }
   }
 
-  invalidateOnFileCreate(requestNode, glob) {
+  invalidateOnFileCreate(requestNode: RequestNode, glob) {
     let globNode = nodeFromGlob(glob);
     if (!this.hasNode(globNode.id)) {
       this.addNode(globNode);
@@ -319,83 +321,13 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
             }
           }
         }
-      } else if (type === 'delete') {
+      } else if (node && type === 'delete') {
         for (let connectedNode of this.getNodesConnectedTo(
           node,
           'invalidated_by_delete'
         )) {
           this.invalidateNode(connectedNode);
           isInvalid = true;
-        }
-      }
-    }
-
-    return isInvalid;
-  }
-
-  // TODO: add edge types to make invalidation more generic, flexible, and less precarious
-  respondToFSEventsOld(events: Array<Event>): boolean {
-    let isInvalid = false;
-    for (let {path, type} of events) {
-      if (path === this.options.lockFile) {
-        for (let id of this.depVersionRequestNodeIds) {
-          let depVersionRequestNode = this.getNode(id);
-          invariant(
-            depVersionRequestNode &&
-              depVersionRequestNode.type === 'dep_version_request'
-          );
-
-          this.invalidateNode(depVersionRequestNode);
-          isInvalid = true;
-        }
-      }
-
-      let node = this.getNode(path);
-
-      let connectedNodes =
-        node && node.type === 'file' ? this.getNodesConnectedTo(node) : [];
-
-      // TODO: invalidate dep path requests that have failed and this creation may fulfill the request
-      if (node && (type === 'create' || type === 'update')) {
-        // sometimes mac reports update events as create events
-        if (node.type === 'file') {
-          for (let connectedNode of connectedNodes) {
-            if (
-              connectedNode.type === 'asset_request' ||
-              connectedNode.type === 'config_request' ||
-              connectedNode.type === 'entry_request' ||
-              connectedNode.type === 'target_request'
-            ) {
-              this.invalidateNode(connectedNode);
-              isInvalid = true;
-            }
-          }
-        }
-      } else if (type === 'create') {
-        for (let id of this.globNodeIds) {
-          let globNode = this.getNode(id);
-          invariant(globNode && globNode.type === 'glob');
-
-          if (isGlobMatch(path, globNode.value)) {
-            let connectedNodes = this.getNodesConnectedTo(globNode);
-            for (let connectedNode of connectedNodes) {
-              invariant(
-                connectedNode.type !== 'file' && connectedNode.type !== 'glob'
-              );
-              this.invalidateNode(connectedNode);
-              isInvalid = true;
-            }
-          }
-        }
-      } else if (node && type === 'delete') {
-        for (let connectedNode of connectedNodes) {
-          if (
-            connectedNode.type === 'dep_path_request' ||
-            connectedNode.type === 'config_request'
-          ) {
-            this.invalidateNode(connectedNode);
-            isInvalid = true;
-          }
         }
       }
     }

@@ -374,8 +374,8 @@ describe('babel', function() {
       await fs.rimraf(distDir);
     });
 
-    // TODO: re enable this
-    it.skip('should rebuild when .babelrc changes', async function() {
+    // TODO
+    it('should rebuild when .babelrc changes', async function() {
       let differentPath = path.join(inputDir, 'differentConfig');
       let configPath = path.join(inputDir, '.babelrc');
 
@@ -404,6 +404,7 @@ describe('babel', function() {
       assert(distFile.includes('something different'));
     });
 
+    // ? Why is this not failing?
     it('should invalidate babel.config.js across runs', async function() {
       let dateRe = /return (\d+);/;
 
@@ -445,6 +446,7 @@ describe('babel', function() {
       assert.notEqual(firstDatestamp, secondDatestamp);
     });
 
+    // ? Why is this not failing?
     it('should invalidate when babel plugins are upgraded across runs', async function() {
       let fixtureDir = path.join(
         __dirname,
