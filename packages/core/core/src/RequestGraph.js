@@ -9,7 +9,6 @@ import invariant from 'assert';
 import nullthrows from 'nullthrows';
 
 import {PromiseQueue, isGlobMatch} from '@parcel/utils';
-import WorkerFarm from '@parcel/workers';
 
 import Graph, {type GraphOpts} from './Graph';
 import type ParcelConfig from './ParcelConfig';
@@ -22,8 +21,8 @@ type RequestGraphOpts = {|
   ...GraphOpts<RequestGraphNode>,
   config: ParcelConfig,
   options: ParcelOptions,
-  onRequestComplete: (any, any) => mixed, // TODO
-  workerFarm: WorkerFarm
+  onRequestComplete: any => mixed, // TODO
+  requestPriorities?: Array<string>
 |};
 
 type SerializedRequestGraph = {|
@@ -66,6 +65,8 @@ type HasTypeAndId = {
   ...
 };
 
+const ALL_REQUEST_TYPES = '@@all_request_types';
+
 export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
   RequestGraphNode,
   RequestGraphEdgeType
@@ -77,7 +78,6 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
   onRequestComplete: (request: TRequest) => mixed;
   queue: PromiseQueue<mixed>;
   validationQueue: PromiseQueue<mixed>;
-  farm: WorkerFarm;
   config: ParcelConfig;
   options: ParcelOptions;
   globNodeIds: Set<NodeId> = new Set();
@@ -85,6 +85,7 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
   // filesystem changes alone. They should rerun on each startup of Parcel.
   unpredicatableNodeIds: Set<NodeId> = new Set();
   depVersionRequestNodeIds: Set<NodeId> = new Set();
+  requestPriorities: Array<string>;
 
   // $FlowFixMe
   static deserialize(opts: SerializedRequestGraph) {
@@ -107,25 +108,39 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
     };
   }
 
-  initOptions({onRequestComplete, config, options}: RequestGraphOpts) {
+  initOptions({
+    onRequestComplete,
+    requestPriorities,
+    config,
+    options
+  }: RequestGraphOpts) {
     this.options = options;
     this.queue = new PromiseQueue();
     this.validationQueue = new PromiseQueue();
     this.onRequestComplete = onRequestComplete;
     this.config = config;
+    this.requestPriorities = requestPriorities || [ALL_REQUEST_TYPES];
   }
 
   async completeValidations() {
     await this.validationQueue.run();
   }
 
-  async completeRequests() {
-    for (let id of this.invalidNodeIds) {
-      let node = nullthrows(this.getNode(id));
-      this.processRequestNode(node);
-    }
+  async completeRequests(signal?: AbortSignal) {
+    this.signal = signal;
 
-    await this.queue.run();
+    let currPriority = 0;
+    while (this.invalidNodeIds.size > 0) {
+      let currType = this.requestPriorities[currPriority];
+      for (let id of this.invalidNodeIds) {
+        let node = nullthrows(this.getNode(id));
+        if (node.value.type === currType || currType === ALL_REQUEST_TYPES) {
+          this.processRequestNode(node);
+        }
+      }
+      await this.queue.run();
+      currPriority++;
+    }
 
     for (let id of this.incompleteNodeIds) {
       let node = nullthrows(this.getNode(id));
@@ -158,6 +173,7 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
 
   removeNode(node: RequestGraphNode) {
     this.invalidNodeIds.delete(node.id);
+    this.incompleteNodeIds.delete(node.id);
     if (node.type === 'glob') {
       this.globNodeIds.delete(node.id);
     }
@@ -176,7 +192,7 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
     }
   }
 
-  async processRequestNode(requestNode: RequestNode) {
+  processRequestNode(requestNode: RequestNode) {
     let signal = this.signal; // ? is this safe?
     let request = requestNode.value;
     this.queue

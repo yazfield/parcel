@@ -100,7 +100,12 @@ export default class AssetGraphBuilder extends EventEmitter {
       config,
       options,
       onRequestComplete: this.handleCompletedRequest.bind(this),
-      workerFarm
+      requestPriorities: [
+        'entry_request',
+        'target_request',
+        'dep_path_request',
+        'asset_request'
+      ]
     });
 
     this.entryResolver = new EntryResolver(this.options);
@@ -136,7 +141,7 @@ export default class AssetGraphBuilder extends EventEmitter {
     assetGraph: AssetGraph,
     changedAssets: Map<string, Asset>
   |}> {
-    await this.requestGraph.completeRequests();
+    await this.requestGraph.completeRequests(signal);
 
     dumpToGraphViz(this.assetGraph, 'AssetGraph');
     dumpToGraphViz(this.requestGraph, 'RequestGraph');
