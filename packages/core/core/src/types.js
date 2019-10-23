@@ -8,6 +8,7 @@ import type {
   File,
   FilePath,
   Glob,
+  JSONObject,
   LogLevel,
   Meta,
   ModuleSpecifier,
@@ -231,9 +232,7 @@ export type ConfigRequestDesc = {|
   isSource: boolean,
   pipeline?: ?string,
   plugin?: PackageName,
-  //$FlowFixMe will lock this down more in a future commit
-  meta: any,
-  result?: Config
+  meta: JSONObject
 |};
 
 export type DepVersionRequestNode = {|

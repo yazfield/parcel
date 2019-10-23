@@ -13,7 +13,7 @@ import type {
   AssetRequest,
   Config,
   NodeId,
-  ConfigRequest,
+  ConfigRequestDesc,
   ParcelOptions
 } from './types';
 import type {WorkerApi} from '@parcel/workers';
@@ -42,7 +42,7 @@ type PostProcessFunc = (
 
 export type TransformationOpts = {|
   request: AssetRequest,
-  loadConfig: (ConfigRequest, NodeId) => Promise<Config>,
+  loadConfig: (ConfigRequestDesc, NodeId) => Promise<Config>,
   parentNodeId: NodeId,
   options: ParcelOptions,
   workerApi: WorkerApi
@@ -52,20 +52,23 @@ type ConfigMap = Map<PackageName, Config>;
 
 export default class Transformation {
   request: AssetRequest;
-  configRequests: Array<ConfigRequest>;
-  loadConfig: ConfigRequest => Promise<Config>;
+  configRequests: Array<ConfigRequestDesc>;
+  loadConfig: ConfigRequestDesc => Promise<Config>;
   options: ParcelOptions;
   impactfulOptions: $Shape<ParcelOptions>;
   workerApi: WorkerApi;
 
   constructor({
     request,
+    //cachedSubRequests,
     loadConfig,
     parentNodeId,
     options,
     workerApi
   }: TransformationOpts) {
     this.request = request;
+    // this.cachedSubRequests = cachedSubRequests;
+    // this.subRequests = [];
     this.configRequests = [];
     this.loadConfig = configRequest => {
       this.configRequests.push(configRequest);
@@ -79,9 +82,27 @@ export default class Transformation {
     this.impactfulOptions = {minify, hot, scopeHoist};
   }
 
+  // loadConfigNew(configRequest) {
+  //   let result =
+  //     this.cachedSubRequests[configRequest] || configLoader.load(configRequest);
+  //   this.subRequests.push({request: configRequest, result});
+
+  //   for ([moduleName, version] of result.devDeps) {
+  //     if (version == null) {
+  //       let depVersionRequest = {type: 'dep_path_request', moduleName};
+  //       version =
+  //         this.cachedSubRequests[configRequest] ||
+  //         this.options.packageManager.resolve(moduleName);
+  //       this.subRequests.push({request: depVersionRequest, result: version});
+  //     }
+  //   }
+
+  //   return result;
+  // }
+
   async run(): Promise<{|
     assets: Array<AssetValue>,
-    configRequests: Array<ConfigRequest>
+    configRequests: Array<ConfigRequestDesc>
   |}> {
     report({
       type: 'buildProgress',
@@ -140,7 +161,6 @@ export default class Transformation {
       [initialAsset],
       pipeline.configs
     );
-    // TODO: is this reading/writing from the cache every time we jump a pipeline? Seems possibly unnecessary...
     let initialCacheEntry = await this.readFromCache(initialAssetCacheKey);
 
     let assets = initialCacheEntry || (await pipeline.transform(initialAsset));

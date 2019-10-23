@@ -37,6 +37,7 @@ type GlobNode = {|id: string, +type: 'glob', value: Glob|};
 type RequestGraphNode = RequestNode | FileNode | GlobNode;
 
 type RequestGraphEdgeType =
+  | 'subrequest'
   | 'invalidated_by_update'
   | 'invalidated_by_delete'
   | 'invalidated_by_create';
@@ -57,6 +58,12 @@ const nodeFromRequest = (request: HasTypeAndId) => ({
   id: request.id,
   type: 'request',
   value: request
+});
+
+const nodeFromSubrequest = (subrequest: HasTypeAndId) => ({
+  id: subrequest.id,
+  type: 'subrequest',
+  value: subrequest
 });
 
 type HasTypeAndId = {
@@ -228,6 +235,24 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
   //     options: this.options
   //   });
   // }
+
+  replaceSubRequests(requestNode: RequestNode, subrequests) {
+    let subrequestNodes = [];
+    for (let subrequest of subrequests) {
+      let node = nodeFromSubrequest(subrequest);
+      subrequestNodes.push(node);
+    }
+    if (!this.hasNode(requestNode.id)) {
+      this.addNode(requestNode);
+    }
+
+    this.replaceNodesConnectedTo(
+      requestNode,
+      subrequestNodes,
+      null,
+      'subrequest'
+    );
+  }
 
   connectFile(requestNode: RequestNode, filePath: FilePath) {
     if (!this.hasNode(requestNode.id)) {

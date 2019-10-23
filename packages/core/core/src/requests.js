@@ -190,7 +190,7 @@ export class AssetRequest extends Request<
   }
 
   addResultToGraph(requestNode, result, graph) {
-    let {assets /*, configRequests*/} = result;
+    let {assets, configRequests} = result;
 
     graph.invalidateOnFileUpdate(
       requestNode,
