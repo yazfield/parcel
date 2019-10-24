@@ -199,6 +199,13 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
     }
   }
 
+  addSubrequest(subrequest) {
+    let subrequestNode = nodeFromSubrequest(subrequest);
+    if (!this.hasNode(subrequestNode.id)) {
+      this.addNode(subrequestNode);
+    }
+  }
+
   processRequestNode(requestNode: RequestNode) {
     let signal = this.signal; // ? is this safe?
     let request = requestNode.value;
@@ -236,14 +243,13 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
   //   });
   // }
 
-  replaceSubRequests(requestNode: RequestNode, subrequests) {
-    let subrequestNodes = [];
-    for (let subrequest of subrequests) {
-      let node = nodeFromSubrequest(subrequest);
-      subrequestNodes.push(node);
-    }
+  replaceSubrequests(requestNode: RequestNode, subrequestNodes) {
     if (!this.hasNode(requestNode.id)) {
       this.addNode(requestNode);
+    }
+
+    for (let subrequestNode of subrequestNodes) {
+      this.invalidNodeIds.delete(subrequestNode.id);
     }
 
     this.replaceNodesConnectedTo(
@@ -284,10 +290,15 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
     }
   }
 
-  // TODO: attach all sub/secondary requests directly to primary requests and just invalidate parent nodes
   invalidateNode(node: RequestNode) {
     if (this.hasNode(node.id)) {
       this.invalidNodeIds.add(node.id);
+      this.clearInvalidations(node);
+
+      let parentNodes = this.getNodesConnectedTo(node, 'subrequest');
+      for (let parentNode of parentNodes) {
+        this.invalidateNode(parentNode);
+      }
     }
   }
 
@@ -298,15 +309,6 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
       this.invalidateNode(node);
     }
   }
-
-  // getMainRequestNode(node: SubRequestNode) {
-  //   let [parentNode] = this.getNodesConnectedTo(node);
-  //   if (parentNode.type === 'config_request') {
-  //     [parentNode] = this.getNodesConnectedTo(parentNode);
-  //   }
-  //   invariant(parentNode.type !== 'file' && parentNode.type !== 'glob');
-  //   return parentNode;
-  // }
 
   invalidateOnFileUpdate(requestNode: RequestNode, filePath: FilePath) {
     let fileNode = nodeFromFilePath(filePath);
@@ -339,6 +341,12 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
     if (!this.hasEdge(requestNode.id, globNode.id, 'invalidated_by_create')) {
       this.addEdge(requestNode.id, globNode.id, 'invalidated_by_create');
     }
+  }
+
+  clearInvalidations(node) {
+    this.replaceNodesConnectedTo(node, [], null, 'invalidated_by update');
+    this.replaceNodesConnectedTo(node, [], null, 'invalidated_by delete');
+    this.replaceNodesConnectedTo(node, [], null, 'invalidated_by create');
   }
 
   respondToFSEvents(events: Array<Event>): boolean {

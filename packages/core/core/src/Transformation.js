@@ -10,7 +10,7 @@ import type {
 } from '@parcel/types';
 import type {
   Asset as AssetValue,
-  AssetRequest,
+  AssetRequestDesc,
   Config,
   NodeId,
   ConfigRequestDesc,
@@ -23,6 +23,7 @@ import path from 'path';
 import nullthrows from 'nullthrows';
 import {md5FromObject} from '@parcel/utils';
 
+import ConfigLoader from './ConfigLoader';
 import {createDependency} from './Dependency';
 import PublicConfig from './public/Config';
 import ParcelConfig from './ParcelConfig';
@@ -41,7 +42,7 @@ type PostProcessFunc = (
 ) => Promise<Array<InternalAsset> | null>;
 
 export type TransformationOpts = {|
-  request: AssetRequest,
+  request: AssetRequestDesc,
   loadConfig: (ConfigRequestDesc, NodeId) => Promise<Config>,
   parentNodeId: NodeId,
   options: ParcelOptions,
@@ -51,9 +52,12 @@ export type TransformationOpts = {|
 type ConfigMap = Map<PackageName, Config>;
 
 export default class Transformation {
-  request: AssetRequest;
-  configRequests: Array<ConfigRequestDesc>;
-  loadConfig: ConfigRequestDesc => Promise<Config>;
+  request: AssetRequestDesc;
+  configLoader: ConfigLoader;
+  configRequests: Array<{|
+    request: ConfigRequestDesc,
+    result: Config
+  |}>;
   options: ParcelOptions;
   impactfulOptions: $Shape<ParcelOptions>;
   workerApi: WorkerApi;
@@ -61,8 +65,6 @@ export default class Transformation {
   constructor({
     request,
     //cachedSubRequests,
-    loadConfig,
-    parentNodeId,
     options,
     workerApi
   }: TransformationOpts) {
@@ -70,10 +72,7 @@ export default class Transformation {
     // this.cachedSubRequests = cachedSubRequests;
     // this.subRequests = [];
     this.configRequests = [];
-    this.loadConfig = configRequest => {
-      this.configRequests.push(configRequest);
-      return loadConfig(configRequest, parentNodeId);
-    };
+    this.configLoader = new ConfigLoader(options);
     this.options = options;
     this.workerApi = workerApi;
 
@@ -100,6 +99,12 @@ export default class Transformation {
   //   return result;
   // }
 
+  async loadConfig(configRequest: ConfigRequestDesc) {
+    let result = await this.configLoader.load(configRequest);
+    this.configRequests.push({request: configRequest, result});
+    return result;
+  }
+
   async run(): Promise<{|
     assets: Array<AssetValue>,
     configRequests: Array<ConfigRequestDesc>
@@ -119,6 +124,15 @@ export default class Transformation {
     let results = await this.runPipeline(pipeline, asset);
     let assets = results.map(a => a.value);
 
+    for (let {request, result} of this.configRequests) {
+      //console.log('RESULT BEFORE', result);
+      let plugin =
+        request.plugin != null &&
+        (await this.parcelConfig.loadPlugin(request.plugin));
+      if (plugin && plugin.preSerializeConfig) {
+        plugin.preSerializeConfig({config: result});
+      }
+    }
     return {assets, configRequests: this.configRequests};
   }
 
@@ -286,6 +300,8 @@ export default class Transformation {
       config.result,
       this.options.packageManager
     );
+    // A little hacky
+    this.parcelConfig = parcelConfig;
 
     configs.set('parcel', config);
 
@@ -300,18 +316,18 @@ export default class Transformation {
           isSource
         });
 
-        let config = new PublicConfig(thirdPartyConfig, this.options);
-        if (thirdPartyConfig.shouldRehydrate) {
-          await plugin.rehydrateConfig({
-            config,
-            options: this.options
-          });
-        } else if (thirdPartyConfig.shouldReload) {
-          await plugin.loadConfig({
-            config,
-            options: this.options
-          });
-        }
+        // let config = new PublicConfig(thirdPartyConfig, this.options);
+        // if (thirdPartyConfig.shouldRehydrate) {
+        //   await plugin.rehydrateConfig({
+        //     config,
+        //     options: this.options
+        //   });
+        // } else if (thirdPartyConfig.shouldReload) {
+        //   await plugin.loadConfig({
+        //     config,
+        //     options: this.options
+        //   });
+        // }
 
         configs.set(moduleName, thirdPartyConfig);
       }

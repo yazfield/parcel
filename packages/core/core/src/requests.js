@@ -37,19 +37,22 @@ class Request<TRequestDesc: JSONObject | string, TResult> {
   isSecondaryRequest: boolean;
   result: ?TResult;
   promise: ?Promise<TResult>;
+  options: ParcelOptions;
 
   constructor({
     type,
     request,
     runFn,
     storeResult,
-    isSecondaryRequest
+    isSecondaryRequest,
+    options
   }: {|
     type: string,
     request: TRequestDesc,
     runFn: TRequestDesc => Promise<TResult>,
     storeResult?: boolean,
-    isSecondaryRequest?: boolean
+    isSecondaryRequest?: boolean,
+    options: ParcelOptions
   |}) {
     this.id = generateRequestId(type, request);
     this.type = type;
@@ -57,6 +60,7 @@ class Request<TRequestDesc: JSONObject | string, TResult> {
     this.runFn = runFn;
     this.storeResult = storeResult || true;
     this.isSecondaryRequest = isSecondaryRequest || false;
+    this.options = options;
   }
 
   async run(): Promise<TResult> {
@@ -84,7 +88,8 @@ class Request<TRequestDesc: JSONObject | string, TResult> {
 export class EntryRequest extends Request<FilePath, EntryResult> {
   constructor({
     request,
-    entryResolver
+    entryResolver,
+    options
   }: {|
     request: FilePath,
     entryResolver: EntryResolver
@@ -93,7 +98,8 @@ export class EntryRequest extends Request<FilePath, EntryResult> {
       type: 'entry_request',
       request,
       runFn: () => entryResolver.resolveEntry(request),
-      storeResult: false
+      storeResult: false,
+      options
     });
   }
 
@@ -119,7 +125,8 @@ export class EntryRequest extends Request<FilePath, EntryResult> {
 export class TargetRequest extends Request<FilePath, TargetResolveResult> {
   constructor({
     request,
-    targetResolver
+    targetResolver,
+    options
   }: {|
     request: FilePath,
     targetResolver: TargetResolver
@@ -128,7 +135,8 @@ export class TargetRequest extends Request<FilePath, TargetResolveResult> {
       type: 'target_request',
       request,
       runFn: () => targetResolver.resolve(path.dirname(request)),
-      storeResult: false
+      storeResult: false,
+      options
     });
   }
 
@@ -185,7 +193,8 @@ export class AssetRequest extends Request<
           asset.stats.time = time;
         }
         return {assets, configRequests};
-      }
+      },
+      options
     });
   }
 
@@ -197,16 +206,56 @@ export class AssetRequest extends Request<
       requestNode.value.request.filePath
     );
 
-    // TODO: add sub requests to graph
-    // let configRequestNodes = configRequests.map(configRequest => {
-    //   let id = generateRequestId('config_request', configRequest);
-    //   return graph.getNode(id);
-    // });
-    // graph.replaceNodesConnectedTo(
-    //   requestNode,
-    //   configRequestNodes,
-    //   node => node.type === 'config_request'
-    // );
+    let subrequestNodes = [];
+    // Add config requests
+    for (let {request, result} of configRequests) {
+      let id = generateRequestId('config_request', request);
+      graph.addSubrequest({
+        id,
+        type: 'config_request',
+        request,
+        result
+      });
+      let subrequestNode = graph.getNode(id);
+      if (graph.invalidNodeIds.has(id)) {
+        if (result.resolvedPath != null) {
+          graph.invalidateOnFileUpdate(subrequestNode, result.resolvedPath);
+        }
+
+        for (let filePath of result.includedFiles) {
+          graph.invalidateOnFileUpdate(subrequestNode, filePath);
+        }
+
+        if (result.watchGlob != null) {
+          graph.invalidateOnCreate(subrequestNode, result.watchGlob);
+        }
+      }
+      subrequestNodes.push(graph.getNode(id));
+
+      // Add dep version requests
+      for (let [moduleSpecifier, version] of result.devDeps) {
+        let depVersionRequst = {
+          moduleSpecifier,
+          resolveFrom: result.resolvedPath // TODO: resolveFrom should be nearest package boundary
+        };
+        let id = generateRequestId('dep_version_request', depVersionRequst);
+        graph.addSubrequest({
+          id,
+          type: 'dep_version_request',
+          request: depVersionRequst,
+          result: version
+        });
+        let subrequestNode = graph.getNode(id);
+        if (graph.invalidNodeIds.has(id)) {
+          if (this.options.lockFile != null) {
+            graph.invalidateOnFileUpdate(this.options.lockFile);
+          }
+        }
+        subrequestNodes.push(subrequestNode);
+      }
+    }
+
+    graph.replaceSubrequests(requestNode, subrequestNodes);
 
     return assets;
 
@@ -220,7 +269,8 @@ export class DepPathRequest extends Request<
 > {
   constructor({
     request,
-    resolverRunner
+    resolverRunner,
+    options
   }: {|
     request: Dependency,
     resolverRunner: ResolverRunner
@@ -229,7 +279,8 @@ export class DepPathRequest extends Request<
       type: 'dep_path_request',
       request,
       runFn: () => resolverRunner.resolve(request),
-      storeResult: false
+      storeResult: false,
+      options
     });
   }
 

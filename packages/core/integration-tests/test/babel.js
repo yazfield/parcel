@@ -19,7 +19,7 @@ import tempy from 'tempy';
 const parcelCli = require.resolve('parcel/src/bin.js');
 const inputDir = path.join(__dirname, '/input');
 
-describe('babel', function() {
+describe.only('babel', function() {
   let subscription;
   beforeEach(async function() {
     // TODO maybe don't do this for all tests
