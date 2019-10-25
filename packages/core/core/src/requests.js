@@ -23,6 +23,8 @@ import type {EntryResult} from './EntryResolver'; // ? Is this right
 import TargetResolver from './TargetResolver';
 import type {TargetResolveResult} from './TargetResolver';
 
+import dumpGraphToGraphViz from './dumpGraphToGraphViz';
+
 // TODO: shouldn't need this once we get rid of loadConfigHandle
 export function generateRequestId(type: string, request: JSONObject | string) {
   return md5FromObject({type, request});
@@ -210,6 +212,8 @@ export class AssetRequest extends Request<
     // Add config requests
     for (let {request, result} of configRequests) {
       let id = generateRequestId('config_request', request);
+      let shouldSetupInvalidations =
+        graph.invalidNodeIds.has(id) || !graph.hasNode(id);
       graph.addSubrequest({
         id,
         type: 'config_request',
@@ -217,7 +221,8 @@ export class AssetRequest extends Request<
         result
       });
       let subrequestNode = graph.getNode(id);
-      if (graph.invalidNodeIds.has(id)) {
+
+      if (shouldSetupInvalidations) {
         if (result.resolvedPath != null) {
           graph.invalidateOnFileUpdate(subrequestNode, result.resolvedPath);
         }
@@ -227,7 +232,7 @@ export class AssetRequest extends Request<
         }
 
         if (result.watchGlob != null) {
-          graph.invalidateOnCreate(subrequestNode, result.watchGlob);
+          graph.invalidateOnFileCreate(subrequestNode, result.watchGlob);
         }
       }
       subrequestNodes.push(graph.getNode(id));
@@ -239,6 +244,8 @@ export class AssetRequest extends Request<
           resolveFrom: result.resolvedPath // TODO: resolveFrom should be nearest package boundary
         };
         let id = generateRequestId('dep_version_request', depVersionRequst);
+        let shouldSetupInvalidations =
+          graph.invalidNodeIds.has(id) || !graph.hasNode(id);
         graph.addSubrequest({
           id,
           type: 'dep_version_request',
@@ -246,9 +253,9 @@ export class AssetRequest extends Request<
           result: version
         });
         let subrequestNode = graph.getNode(id);
-        if (graph.invalidNodeIds.has(id)) {
+        if (shouldSetupInvalidations) {
           if (this.options.lockFile != null) {
-            graph.invalidateOnFileUpdate(this.options.lockFile);
+            graph.invalidateOnFileUpdate(subrequestNode, this.options.lockFile);
           }
         }
         subrequestNodes.push(subrequestNode);

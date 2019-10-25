@@ -19,7 +19,7 @@ import tempy from 'tempy';
 const parcelCli = require.resolve('parcel/src/bin.js');
 const inputDir = path.join(__dirname, '/input');
 
-describe.only('babel', function() {
+describe('babel', function() {
   let subscription;
   beforeEach(async function() {
     // TODO maybe don't do this for all tests
@@ -405,8 +405,8 @@ describe.only('babel', function() {
     });
 
     it('should invalidate babel.config.js across runs', async function() {
-      // This test is only passing because the graphs are not being reused, manually fail for now
-      assert(false);
+      //! This test is only passing because the graphs are not being reused, manually fail for now
+      assert(false, 'THIS TEST SHOULD FAIL');
       let dateRe = /return (\d+);/;
 
       let fixtureDir = path.join(__dirname, '/integration/babel-config-js');
@@ -448,7 +448,7 @@ describe.only('babel', function() {
     });
 
     it('should invalidate when babel plugins are upgraded across runs', async function() {
-      // This test is only passing because the graphs are not being reused, manually fail for now
+      //! This test is only passing because the graphs are not being reused, manually fail for now
       assert(false);
       let fixtureDir = path.join(
         __dirname,

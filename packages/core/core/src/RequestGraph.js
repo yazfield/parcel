@@ -260,36 +260,6 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
     );
   }
 
-  connectFile(requestNode: RequestNode, filePath: FilePath) {
-    if (!this.hasNode(requestNode.id)) {
-      return;
-    }
-
-    let fileNode = nodeFromFilePath(filePath);
-    if (!this.hasNode(fileNode.id)) {
-      this.addNode(fileNode);
-    }
-
-    if (!this.hasEdge(requestNode.id, fileNode.id)) {
-      this.addEdge(requestNode.id, fileNode.id);
-    }
-  }
-
-  connectGlob(requestNode: RequestNode, glob: Glob) {
-    if (!this.hasNode(requestNode.id)) {
-      return;
-    }
-
-    let globNode = nodeFromGlob(glob);
-    if (!this.hasNode(globNode.id)) {
-      this.addNode(globNode);
-    }
-
-    if (!this.hasEdge(requestNode.id, globNode.id)) {
-      this.addEdge(requestNode.id, globNode.id);
-    }
-  }
-
   invalidateNode(node: RequestNode) {
     if (this.hasNode(node.id)) {
       this.invalidNodeIds.add(node.id);
@@ -357,7 +327,8 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
       let node = this.getNode(path);
 
       // sometimes mac os reports update events as create events
-      // if it was a create event, but the file already exists in the graph, then we can assume it was actually an update event
+      // if it was a create event, but the file already exists in the graph,
+      // then we can assume it was actually an update event
       if (node && (type === 'create' || type === 'update')) {
         for (let connectedNode of this.getNodesConnectedTo(
           node,
