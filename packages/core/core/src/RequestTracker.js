@@ -1,29 +1,15 @@
 // @flow strict-local
 
 import type {AbortSignal} from 'abortcontroller-polyfill/dist/cjs-ponyfill';
-import type {FilePath, Glob} from '@parcel/types';
+import type {File, FilePath, Glob} from '@parcel/types';
 import type {Event} from '@parcel/watcher';
-import type {ParcelOptions} from './types';
+import type {NodeId} from './types';
 
 import invariant from 'assert';
 import nullthrows from 'nullthrows';
-
-import {PromiseQueue, isGlobMatch} from '@parcel/utils';
-
+import {isGlobMatch, md5FromObject} from '@parcel/utils';
 import Graph, {type GraphOpts} from './Graph';
-import type ParcelConfig from './ParcelConfig';
-
-import type {NodeId, ValidationOpts} from './types';
-
 import {assertSignalNotAborted} from './utils';
-
-type RequestGraphOpts = {|
-  ...GraphOpts<RequestGraphNode>,
-  config: ParcelConfig,
-  options: ParcelOptions,
-  onRequestComplete: any => mixed, // TODO
-  requestPriorities?: Array<string>
-|};
 
 type SerializedRequestGraph = {|
   ...GraphOpts<RequestGraphNode>,
@@ -34,6 +20,11 @@ type SerializedRequestGraph = {|
 
 type FileNode = {|id: string, +type: 'file', value: File|};
 type GlobNode = {|id: string, +type: 'glob', value: Glob|};
+type RequestNode = {|
+  id: string,
+  +type: 'request',
+  value: {|id: string, type: string, request: mixed, result?: mixed|}
+|};
 type RequestGraphNode = RequestNode | FileNode | GlobNode;
 
 type RequestGraphEdgeType =
@@ -60,46 +51,28 @@ const nodeFromRequest = (request: HasTypeAndId) => ({
   value: request
 });
 
-const nodeFromSubrequest = (subrequest: HasTypeAndId) => ({
-  id: subrequest.id,
-  type: 'subrequest',
-  value: subrequest
-});
-
 type HasTypeAndId = {
-  type: string,
   id: string,
+  type: string,
   ...
 };
 
-const ALL_REQUEST_TYPES = '@@all_request_types';
-
-export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
+export class RequestGraph extends Graph<
   RequestGraphNode,
   RequestGraphEdgeType
 > {
-  signal: ?AbortSignal;
   invalidNodeIds: Set<NodeId> = new Set();
   incompleteNodeIds: Set<NodeId> = new Set();
-  runValidate: ValidationOpts => Promise<void>;
-  onRequestComplete: (request: TRequest) => mixed;
-  queue: PromiseQueue<mixed>;
-  validationQueue: PromiseQueue<mixed>;
-  config: ParcelConfig;
-  options: ParcelOptions;
   globNodeIds: Set<NodeId> = new Set();
   // Unpredictable nodes are requests that cannot be predicted whether they should rerun based on
   // filesystem changes alone. They should rerun on each startup of Parcel.
   unpredicatableNodeIds: Set<NodeId> = new Set();
-  depVersionRequestNodeIds: Set<NodeId> = new Set();
-  requestPriorities: Array<string>;
 
   // $FlowFixMe
   static deserialize(opts: SerializedRequestGraph) {
-    let deserialized = new RequestGraph<TRequest>(opts);
+    let deserialized = new RequestGraph();
     deserialized.invalidNodeIds = opts.invalidNodeIds;
     deserialized.globNodeIds = opts.globNodeIds;
-    deserialized.depVersionRequestNodeIds = opts.depVersionRequestNodeIds;
     deserialized.unpredicatableNodeIds = opts.unpredicatableNodeIds;
     // $FlowFixMe
     return deserialized;
@@ -115,64 +88,11 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
     };
   }
 
-  initOptions({
-    onRequestComplete,
-    requestPriorities,
-    config,
-    options
-  }: RequestGraphOpts) {
-    this.options = options;
-    this.queue = new PromiseQueue();
-    this.validationQueue = new PromiseQueue();
-    this.onRequestComplete = onRequestComplete;
-    this.config = config;
-    this.requestPriorities = requestPriorities || [ALL_REQUEST_TYPES];
-  }
-
-  async completeValidations() {
-    await this.validationQueue.run();
-  }
-
-  async completeRequests(signal?: AbortSignal) {
-    this.signal = signal;
-
-    let currPriority = 0;
-    while (this.invalidNodeIds.size > 0) {
-      let currType = this.requestPriorities[currPriority];
-      for (let id of this.invalidNodeIds) {
-        let node = nullthrows(this.getNode(id));
-        if (node.value.type === currType || currType === ALL_REQUEST_TYPES) {
-          this.processRequestNode(node);
-        }
-      }
-      await this.queue.run();
-      currPriority++;
-    }
-
-    for (let id of this.incompleteNodeIds) {
-      let node = nullthrows(this.getNode(id));
-      this.processRequestNode(node);
-    }
-
-    await this.queue.run();
-  }
-
   addNode(node: RequestGraphNode) {
     if (!this.hasNode(node.id)) {
-      if (node.type === 'request') {
-        this.incompleteNodeIds.add(node.id);
-        let isInvalidationPhase = this.invalidNodeIds.size > 0;
-        if (!isInvalidationPhase) {
-          this.processRequestNode(node);
-        }
-      }
-
       if (node.type === 'glob') {
         this.globNodeIds.add(node.id);
       }
-      // else if (node.type === 'dep_version_request') {
-      //   this.depVersionRequestNodeIds.add(node.id);
-      // }
     }
 
     return super.addNode(node);
@@ -184,66 +104,28 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
     if (node.type === 'glob') {
       this.globNodeIds.delete(node.id);
     }
-    // } else if (node.type === 'dep_version_request') {
-    //   this.depVersionRequestNodeIds.delete(node.id);
-    // } else if (node.type === 'config_request') {
-    //   this.unpredicatableNodeIds.delete(node.id);
-    // }
     return super.removeNode(node);
   }
 
-  addRequest(request: TRequest) {
+  addRequest(request: HasTypeAndId) {
     let requestNode = nodeFromRequest(request);
     if (!this.hasNode(requestNode.id)) {
       this.addNode(requestNode);
+    } else {
+      requestNode = this.getNode(requestNode.id);
     }
+    return requestNode;
   }
 
-  addSubrequest(subrequest) {
-    let subrequestNode = nodeFromSubrequest(subrequest);
-    if (!this.hasNode(subrequestNode.id)) {
-      this.addNode(subrequestNode);
-    }
+  completeRequest(requestNode) {
+    this.invalidNodeIds.delete(requestNode.id);
+    this.incompleteNodeIds.delete(requestNode.id);
   }
 
-  processRequestNode(requestNode: RequestNode) {
-    let signal = this.signal; // ? is this safe?
-    let request = requestNode.value;
-    this.queue
-      .add(async () => {
-        let result = await request.run();
-        assertSignalNotAborted(signal);
-
-        if (!this.hasNode(requestNode.id)) {
-          return;
-        }
-        request.addResultToGraph(requestNode, result, this);
-
-        this.invalidNodeIds.delete(requestNode.id);
-        this.incompleteNodeIds.delete(requestNode.id);
-
-        // ? What should happen if this fails
-        this.onRequestComplete(request);
-
-        return result;
-      })
-      .catch(() => {
-        // Do nothing
-        // This is catching a promise wrapped around the promise returning function.
-        // The promise queue will still reject
-      });
-  }
-
-  // validate(requestNode: AssetRequestNode) {
-  //   return this.runValidate({
-  //     request: requestNode.value,
-  //     loadConfig: this.loadConfigHandle,
-  //     parentNodeId: requestNode.id,
-  //     options: this.options
-  //   });
-  // }
-
-  replaceSubrequests(requestNode: RequestNode, subrequestNodes) {
+  replaceSubrequests(
+    requestNode: RequestNode,
+    subrequestNodes: Array<RequestNode>
+  ) {
     if (!this.hasNode(requestNode.id)) {
       this.addNode(requestNode);
     }
@@ -260,7 +142,8 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
     );
   }
 
-  invalidateNode(node: RequestNode) {
+  invalidateNode(node: RequestGraphNode) {
+    invariant(node.type === 'request');
     if (this.hasNode(node.id)) {
       this.invalidNodeIds.add(node.id);
       this.clearInvalidations(node);
@@ -323,7 +206,6 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
     let isInvalid = false;
 
     for (let {path, type} of events) {
-      // TODO: invalidate depVersionRequestNodes in AssetGraphBuilder
       let node = this.getNode(path);
 
       // sometimes mac os reports update events as create events
@@ -365,5 +247,77 @@ export default class RequestGraph<TRequest: HasTypeAndId> extends Graph<
     }
 
     return isInvalid;
+  }
+}
+
+function isInvalid(request: Request, requestGraph: RequestGraph) {
+  return requestGraph.invalidNodeIds.has(request.id);
+}
+
+export function generateRequestId(type: string, request: JSONObject | string) {
+  return md5FromObject({type, request});
+}
+
+export interface RequestRunner<TRequest, TResult> {
+  run(TRequest): TResult;
+  updateGraph(TRequest, TResult, RequestGraph): void;
+}
+
+export default class RequestTracker<TRequest> {
+  runnerMap: {[string]: RequestRunner<TRequest>};
+  requestGraph: RequestGraph;
+  invalidRequestIds: Set<string>;
+  incompleteRequestIds: Set<string>;
+
+  constructor({runnerMap, requestGraph}) {
+    this.runnerMap = runnerMap;
+    this.requestGraph = requestGraph || new RequestGraph();
+    this.invalidRequestIds = new Set();
+    this.incompleteRequestIds = new Set();
+  }
+
+  async runRequest(
+    type: string,
+    request: HasTypeAndId,
+    {
+      signal,
+      parentRequest
+    }: {|signal: ?AbortSignal, parentRequest?: HasTypeAndId|} = {}
+  ) {
+    let requestNode = this.requestGraph.getNode(request.id);
+
+    if (requestNode && !isInvalid(request, this.requestGraph)) {
+      invariant(requestNode.type === 'request');
+      return requestNode.value.result;
+    } else if (!requestNode) {
+      let id = generateRequestId(type, request);
+      requestNode = this.requestGraph.addRequest({id, type, request});
+    }
+
+    let runner = this.runnerMap[type];
+    nullthrows(runner, `No runner configured for request type ${type}`);
+    let result = await runner.run(request, this.requestGraph);
+    assertSignalNotAborted(signal);
+
+    if (!this.requestGraph.hasNode(requestNode.id)) {
+      return;
+    }
+
+    // This function should clear invalid/incomplete status and add result to the value
+    this.requestGraph.completeRequest(requestNode);
+
+    await runner.updateGraph(requestNode, result, this.requestGraph);
+
+    return result;
+  }
+
+  removeRequest(request) {
+    this.requestGraph.removeNode(request.id);
+  }
+
+  replaceSubrequests(request, subrequests) {}
+
+  respondToFSEvents(events: Array<Event>): boolean {
+    return this.requestGraph.respondToFSEvents(events);
   }
 }

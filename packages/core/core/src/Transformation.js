@@ -179,6 +179,7 @@ export default class Transformation {
 
     let assets = initialCacheEntry || (await pipeline.transform(initialAsset));
     if (!initialCacheEntry) {
+      console.log('WRITING TRANSFORMATION TO CACHE', process.pid);
       await this.writeToCache(initialAssetCacheKey, assets, pipeline.configs);
     }
 

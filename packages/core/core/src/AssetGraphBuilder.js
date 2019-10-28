@@ -7,66 +7,47 @@ import type {
   Asset,
   AssetGraphNode,
   AssetRequestDesc,
-  AssetRequestResult,
-  Config,
-  ConfigRequestDesc,
   ParcelOptions,
-  Target,
-  TransformationOpts
+  Target
 } from './types';
+import type ParcelConfig from './ParcelConfig';
 
 import EventEmitter from 'events';
-import {md5FromObject, md5FromString} from '@parcel/utils';
 import nullthrows from 'nullthrows';
-
+import path from 'path';
+import {md5FromObject, md5FromString} from '@parcel/utils';
 import AssetGraph from './AssetGraph';
-import type ParcelConfig from './ParcelConfig';
-import RequestGraph from './RequestGraph';
+import RequestTracker, {RequestGraph} from './RequestTracker';
 import {PARCEL_VERSION} from './constants';
 import {
   generateRequestId,
-  EntryRequest,
-  TargetRequest,
-  AssetRequest,
-  DepPathRequest
+  EntryRequestRunner,
+  TargetRequestRunner,
+  AssetRequestRunner,
+  DepPathRequestRunner
 } from './requests';
-import ResolverRunner from './ResolverRunner';
-import {EntryResolver} from './EntryResolver';
-import TargetResolver from './TargetResolver';
-import ConfigLoader from './ConfigLoader';
-import {addDevDependency} from './InternalConfig';
 
 import dumpToGraphViz from './dumpGraphToGraphViz';
-import path from 'path';
 
 type Opts = {|
   options: ParcelOptions,
   config: ParcelConfig,
   name: string,
   entries?: Array<string>,
-  targets?: Array<Target>, // ? Is this still used?
   assetRequests?: Array<AssetRequestDesc>,
   workerFarm: WorkerFarm
 |};
 
-type AssetGraphBuilderRequest =
-  | EntryRequest
-  | TargetRequest
-  | AssetRequest
-  | DepPathRequest;
-
 export default class AssetGraphBuilder extends EventEmitter {
   assetGraph: AssetGraph;
-  requestGraph: RequestGraph<AssetGraphBuilderRequest>;
+  requestGraph: RequestGraph;
+  requestTracker: RequestTracker;
+
   changedAssets: Map<string, Asset> = new Map();
   options: ParcelOptions;
+  config: ParcelConfig;
+  workerFarm: WorkerFarm;
   cacheKey: string;
-  loadConfigHandle: () => Promise<Config>;
-  entryResolver: EntryResolver;
-  targetResolver: TargetResolver;
-  resolverRunner: ResolverRunner;
-  configLoader: ConfigLoader;
-  runTransform: TransformationOpts => Promise<AssetRequestResult>;
 
   async init({
     config,
@@ -77,6 +58,7 @@ export default class AssetGraphBuilder extends EventEmitter {
     workerFarm
   }: Opts) {
     this.options = options;
+
     let {minify, hot, scopeHoist} = options;
     this.cacheKey = md5FromObject({
       parcelVersion: PARCEL_VERSION,
@@ -92,41 +74,25 @@ export default class AssetGraphBuilder extends EventEmitter {
     }
 
     this.assetGraph.initOptions({
-      onNodeAdded: node => this.handleNodeAddedToAssetGraph(node),
       onNodeRemoved: node => this.handleNodeRemovedFromAssetGraph(node)
     });
 
-    this.requestGraph.initOptions({
-      config,
-      options,
-      onRequestComplete: this.handleCompletedRequest.bind(this),
-      requestPriorities: [
-        'entry_request',
-        'target_request',
-        'dep_path_request',
-        'asset_request'
-      ]
+    let runnerMap = {
+      entry_request: new EntryRequestRunner({options}),
+      target_request: new TargetRequestRunner({options}),
+      asset_request: new AssetRequestRunner({options, workerFarm}),
+      dep_path_request: new DepPathRequestRunner({options, config})
+      // config_request: new ConfigRequestRunner({options}),
+      // dep_version_request: new DepVersionRequestRunner({options})
+    };
+    this.requestTracker = new RequestTracker({
+      runnerMap,
+      requestGraph: this.requestGraph
     });
-
-    this.entryResolver = new EntryResolver(this.options);
-    this.targetResolver = new TargetResolver(this.options);
-
-    this.resolverRunner = new ResolverRunner({
-      config,
-      options
-    });
-
-    this.runTransform = workerFarm.createHandle('runTransform');
-    //this.runValidate = workerFarm.createHandle('runValidate');
-    // $FlowFixMe
-    this.loadConfigHandle = workerFarm.createReverseHandle(
-      this.loadConfig.bind(this)
-    );
-    this.configLoader = new ConfigLoader(options);
 
     if (changes) {
       this.requestGraph.invalidateUnpredictableNodes();
-      this.respondToFSEvents(changes);
+      this.requestTracker.respondToFSEvents(changes);
     } else {
       this.assetGraph.initialize({
         entries,
@@ -141,7 +107,16 @@ export default class AssetGraphBuilder extends EventEmitter {
     assetGraph: AssetGraph,
     changedAssets: Map<string, Asset>
   |}> {
-    await this.requestGraph.completeRequests(signal);
+    while (this.assetGraph.hasIncompleteNodes()) {
+      let promises = [];
+      for (let id of this.assetGraph.incompleteNodeIds) {
+        let node = this.assetGraph.getNode(id);
+        nullthrows(node);
+        promises.push(this.processIncompleteAssetGraphNode(node, signal));
+      }
+
+      await Promise.all(promises);
+    }
 
     dumpToGraphViz(this.assetGraph, 'AssetGraph');
     dumpToGraphViz(this.requestGraph, 'RequestGraph');
@@ -153,68 +128,26 @@ export default class AssetGraphBuilder extends EventEmitter {
   }
 
   validate(): Promise<void> {
-    return this.requestGraph.completeValidations();
+    console.log('TODO: reimplement AssetGraphBuilder.validate()');
+    // for (let asset of this.changedAssets) {
+    //   this.runValidate({asset, config});
+    // }
   }
 
-  // NOTE: not adding config and dep version requests to graph in middle of refactor
-  async loadConfig(configRequest: ConfigRequestDesc) {
-    let config = await this.configLoader.load(configRequest);
-
-    for (let [moduleSpecifier, version] of config.devDeps) {
-      if (version == null) {
-        let {pkg} = await this.options.packageManager.resolve(
-          `${moduleSpecifier}/package.json`,
-          `${config.resolvedPath}/index`
-        );
-
-        // TODO: Figure out how to handle when local plugin packages change, since version won't be enough
-        version = nullthrows(pkg).version;
-        addDevDependency(config, moduleSpecifier, version);
-      }
-    }
-
-    return config;
-  }
-
-  handleNodeAddedToAssetGraph(node: AssetGraphNode) {
-    let request;
+  processIncompleteAssetGraphNode(node: AssetGraphNode, signal: AbortSignal) {
     switch (node.type) {
-      case 'entry_specifier': {
-        request = new EntryRequest({
-          request: node.value,
-          entryResolver: this.entryResolver
-        });
-        break;
-      }
+      case 'entry_specifier':
+        return this.runEntryRequest(node.value, signal);
       case 'entry_file':
-        request = new TargetRequest({
-          request: node.value,
-          targetResolver: this.targetResolver
-        });
-        break;
+        return this.runTargetRequest(node.value, signal);
       case 'dependency':
-        request = new DepPathRequest({
-          request: node.value,
-          resolverRunner: this.resolverRunner
-        });
-        break;
+        return this.runDepPathRequest(node.value, signal);
       case 'asset_group':
-        request = new AssetRequest({
-          request: node.value,
-          runTransform: this.runTransform,
-          loadConfig: this.loadConfigHandle,
-          options: this.options
-        });
-        break;
-      case 'asset': {
-        let asset = node.value;
-        this.changedAssets.set(asset.id, asset); // ? Is this right?
-        break;
-      }
-    }
-
-    if (request) {
-      this.requestGraph.addRequest(request);
+        return this.runAssetRequest(node.value, signal);
+      default:
+        throw new Error(
+          `AssetGraphNode of type ${node.type} should not be marked incomplete`
+        );
     }
   }
 
@@ -238,25 +171,48 @@ export default class AssetGraphBuilder extends EventEmitter {
     }
 
     if (removeId != null) {
-      this.requestGraph.removeById(removeId);
+      this.requestTracker.removeRequest(type, request);
     }
   }
 
-  handleCompletedRequest(request: AssetGraphBuilderRequest) {
-    if (request instanceof EntryRequest) {
-      this.assetGraph.resolveEntry(request.request, request.result.entries);
-    } else if (request instanceof TargetRequest) {
-      this.assetGraph.resolveTargets(request.request, request.result.targets);
-    } else if (request instanceof AssetRequest) {
-      let {assets} = request.result;
-      this.assetGraph.resolveAssetGroup(request.request, assets);
-      for (let asset of assets) {
-        this.changedAssets.set(asset.id, asset); // ? Is this right?
-      }
-    } else if (request instanceof DepPathRequest) {
-      if (request.result != null) {
-        this.assetGraph.resolveDependency(request.request, request.result);
-      }
+  async runEntryRequest(request, signal) {
+    let result = await this.requestTracker.runRequest(
+      'entry_request',
+      request,
+      {signal}
+    );
+    this.assetGraph.resolveEntry(request, result.entries);
+  }
+
+  async runTargetRequest(request, signal) {
+    let result = await this.requestTracker.runRequest(
+      'target_request',
+      request,
+      {signal}
+    );
+    this.assetGraph.resolveTargets(request, result.targets);
+  }
+
+  async runAssetRequest(request, signal) {
+    let result = await this.requestTracker.runRequest(
+      'asset_request',
+      request,
+      {signal}
+    );
+    this.assetGraph.resolveAssetGroup(request, result.assets);
+    for (let asset of result.assets) {
+      this.changedAssets.set(asset.id, asset); // ? Is this right?
+    }
+  }
+
+  async runDepPathRequest(request, signal) {
+    let result = await this.requestTracker.runRequest(
+      'dep_path_request',
+      request,
+      {signal}
+    );
+    if (result != null) {
+      this.assetGraph.resolveDependency(request, result);
     }
   }
 

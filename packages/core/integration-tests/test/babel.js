@@ -93,7 +93,7 @@ describe('babel', function() {
     assert(file.includes('hello there'));
   });
 
-  it('should compile with babel with default engines if no config', async function() {
+  it.only('should compile with babel with default engines if no config', async function() {
     await bundle(path.join(__dirname, '/integration/babel-default/index.js'), {
       mode: 'production',
       defaultEngines: null,

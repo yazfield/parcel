@@ -238,6 +238,7 @@ export default class Parcel {
     signal?: AbortSignal,
     startTime?: number
   |}): Promise<BuildEvent> {
+    console.log('BUILDING');
     let options = nullthrows(this.#resolvedOptions);
     try {
       if (options.profile) {
@@ -253,11 +254,17 @@ export default class Parcel {
       );
       dumpGraphToGraphViz(assetGraph, 'MainAssetGraph');
 
+      console.log('DONE BUILDING ASSET GRAPH');
+
       let bundleGraph = await this.#bundlerRunner.bundle(assetGraph, {signal});
       dumpGraphToGraphViz(bundleGraph._graph, 'BundleGraph');
 
+      console.log('DONE BUILDING BUNDLE GRAPH');
+
       await this.#packagerRunner.writeBundles(bundleGraph);
       assertSignalNotAborted(signal);
+
+      console.log('DONE WRITING BUNDLES');
 
       let event = {
         type: 'buildSuccess',

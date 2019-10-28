@@ -8,6 +8,7 @@ import type {
   AssetGroupNode,
   Dependency,
   DependencyNode,
+  NodeId,
   Target
 } from './types';
 
@@ -68,9 +69,18 @@ const nodeFromEntryFile = (entry: string) => ({
   value: entry
 });
 
+// Types that are considered incomplete when they don't have a child node
+const INCOMPLETE_TYPES = [
+  'entry_specifier',
+  'entry_file',
+  'dependency',
+  'asset_group'
+];
+
 export default class AssetGraph extends Graph<AssetGraphNode> {
   onNodeAdded: ?(node: AssetGraphNode) => mixed;
   onNodeRemoved: ?(node: AssetGraphNode) => mixed;
+  incompleteNodeIds: Set<NodeId> = new Set();
   hash: ?string;
 
   // $FlowFixMe
@@ -108,25 +118,34 @@ export default class AssetGraph extends Graph<AssetGraphNode> {
         ...assetGroups.map(assetGroup => nodeFromAssetGroup(assetGroup))
       );
     }
-
     this.replaceNodesConnectedTo(rootNode, nodes);
   }
 
   addNode(node: AssetGraphNode) {
     this.hash = null;
+    if (INCOMPLETE_TYPES.includes(node.type)) {
+      this.incompleteNodeIds.add(node.id);
+    }
     this.onNodeAdded && this.onNodeAdded(node);
     return super.addNode(node);
   }
 
   removeNode(node: AssetGraphNode) {
     this.hash = null;
+    this.incompleteNodeIds.delete(node.id);
     this.onNodeRemoved && this.onNodeRemoved(node);
     return super.removeNode(node);
   }
 
+  hasIncompleteNodes() {
+    return this.incompleteNodeIds.size > 0;
+  }
+
   resolveEntry(entry: string, resolved: Array<FilePath>) {
+    let entrySpecifierNode = nodeFromEntrySpecifier(entry);
     let entryFileNodes = resolved.map(file => nodeFromEntryFile(file));
-    this.replaceNodesConnectedTo(nodeFromEntrySpecifier(entry), entryFileNodes);
+    this.replaceNodesConnectedTo(entrySpecifierNode, entryFileNodes);
+    this.incompleteNodeIds.delete(entrySpecifierNode.id);
   }
 
   resolveTargets(entryFile: FilePath, targets: Array<Target>) {
@@ -145,6 +164,7 @@ export default class AssetGraph extends Graph<AssetGraphNode> {
     let entryNode = nodeFromEntryFile(entryFile);
     if (this.hasNode(entryNode.id)) {
       this.replaceNodesConnectedTo(entryNode, depNodes);
+      this.incompleteNodeIds.delete(entryNode.id);
     }
   }
 
@@ -183,6 +203,7 @@ export default class AssetGraph extends Graph<AssetGraphNode> {
 
     if (!defer) {
       this.replaceNodesConnectedTo(depNode, [assetGroupNode]);
+      this.incompleteNodeIds.delete(depNode.id);
     }
   }
 
@@ -194,12 +215,7 @@ export default class AssetGraph extends Graph<AssetGraphNode> {
 
     let assetNodes = assets.map(asset => nodeFromAsset(asset));
     this.replaceNodesConnectedTo(assetGroupNode, assetNodes);
-
-    for (let asset of assets) {
-      let assetNode = nodeFromAsset(asset);
-      assetNodes.push(assetNode);
-    }
-    this.replaceNodesConnectedTo(assetGroupNode, assetNodes);
+    this.incompleteNodeIds.delete(assetGroupNode.id);
 
     for (let assetNode of assetNodes) {
       let depNodes = [];
