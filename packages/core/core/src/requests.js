@@ -167,6 +167,10 @@ export class AssetRequestRunner implements RequestRunner {
         if (result.watchGlob != null) {
           graph.invalidateOnFileCreate(subrequestNode, result.watchGlob);
         }
+
+        if (result.shouldInvalidateOnStartup) {
+          graph.invalidateOnStartup(subrequestNode);
+        }
       }
       subrequestNodes.push(graph.getNode(id));
 

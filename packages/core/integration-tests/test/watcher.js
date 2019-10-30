@@ -20,7 +20,7 @@ import {symlinkSync} from 'fs';
 const inputDir = path.join(__dirname, '/watcher');
 const distDir = path.join(inputDir, 'dist');
 
-describe.skip('watcher', function() {
+describe('watcher', function() {
   let subscription;
   afterEach(async () => {
     if (subscription) {
@@ -48,7 +48,6 @@ describe.skip('watcher', function() {
     assert.equal(output(), 10);
   });
 
-  // TODO
   it('should rebuild on a config file change', async function() {
     await ncp(path.join(__dirname, 'integration/custom-config'), inputDir);
     await ncp(

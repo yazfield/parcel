@@ -196,7 +196,12 @@ export class RequestGraph extends Graph<
     }
   }
 
+  invalidateOnStartup(requestNode: RequestNode) {
+    this.unpredicatableNodeIds.add(requestNode.id);
+  }
+
   clearInvalidations(node) {
+    this.unpredicatableNodeIds.delete(node.id);
     this.replaceNodesConnectedTo(node, [], null, 'invalidated_by update');
     this.replaceNodesConnectedTo(node, [], null, 'invalidated_by delete');
     this.replaceNodesConnectedTo(node, [], null, 'invalidated_by create');
@@ -307,8 +312,9 @@ export default class RequestTracker<TRequest> {
     return result;
   }
 
-  removeRequest(request) {
-    this.requestGraph.removeNode(request.id);
+  removeRequest(type, request) {
+    let id = generateRequestId(type, request);
+    this.requestGraph.removeById(id);
   }
 
   replaceSubrequests(request, subrequests) {}

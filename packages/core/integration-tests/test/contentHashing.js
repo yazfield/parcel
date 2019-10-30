@@ -66,6 +66,7 @@ describe('content hashing', function() {
       path.join(__dirname, '/input/test.txt'),
       'hello world'
     );
+    console.log('SECOND BUILD');
     await bundleJs();
 
     js = await outputFS.readFile(path.join(distDir, 'index.js'), 'utf8');
