@@ -13,6 +13,7 @@ import type {
   TargetRequestNode
 } from './types';
 import type {RequestRunner} from './RequestTracker';
+import type AssetGraph from './AssetGraph';
 import type ParcelConfig from './ParcelConfig';
 import type {TargetResolveResult} from './TargetResolver';
 import type {EntryResult} from './EntryResolver'; // ? Is this right
@@ -26,20 +27,30 @@ import {generateRequestId} from './RequestTracker';
 
 export class EntryRequestRunner implements RequestRunner {
   entryResolver: EntryResolver;
+  assetGraph: AssetGraph;
 
-  constructor({options}: {|options: ParcelOptions|}) {
+  constructor({
+    options,
+    assetGraph
+  }: {|
+    options: ParcelOptions,
+    assetGraph: AssetGraph
+  |}) {
     this.entryResolver = new EntryResolver(options);
+    this.assetGraph = assetGraph;
   }
 
   run(request) {
     return this.entryResolver.resolveEntry(request);
   }
 
-  updateGraph(
+  onComplete(
     requestNode: EntryRequestNode,
     result: EntryResult,
     graph: RequestGraph
   ) {
+    this.assetGraph.resolveEntry(requestNode.value.request, result.entries);
+
     // Connect files like package.json that affect the entry
     // resolution so we invalidate when they change.
     for (let file of result.files) {
@@ -56,20 +67,30 @@ export class EntryRequestRunner implements RequestRunner {
 
 export class TargetRequestRunner implements RequestRunner {
   targetResolver: TargetResolver;
+  assetGraph: AssetGraph;
 
-  constructor({options}: {|options: ParcelOptions|}) {
+  constructor({
+    options,
+    assetGraph
+  }: {|
+    options: ParcelOptions,
+    assetGraph: AssetGraph
+  |}) {
     this.targetResolver = new TargetResolver(options);
+    this.assetGraph = assetGraph;
   }
 
   run(request) {
     return this.targetResolver.resolve(path.dirname(request));
   }
 
-  updateGraph(
+  onComplete(
     requestNode: TargetRequestNode,
     result: TargetResolveResult,
     graph: RequestGraph
   ) {
+    this.assetGraph.resolveTargets(requestNode.value.request, result.targets);
+
     // Connect files like package.json that affect the target
     // resolution so we invalidate when they change.
     for (let file of result.files) {
@@ -81,16 +102,20 @@ export class TargetRequestRunner implements RequestRunner {
 export class AssetRequestRunner implements RequestRunner {
   options: ParcelOptions;
   runTransform: TransformationOpts => Promise<AssetRequestResult>;
+  assetGraph: AssetGraph;
 
   constructor({
     options,
-    workerFarm
+    workerFarm,
+    assetGraph
   }: {|
     options: ParcelOptions,
-    workerFarm: WorkerFarm
+    workerFarm: WorkerFarm,
+    assetGraph: AssetGraph
   |}) {
     this.options = options;
     this.runTransform = workerFarm.createHandle('runTransform');
+    this.assetGraph = assetGraph;
   }
 
   async run(request) {
@@ -107,7 +132,9 @@ export class AssetRequestRunner implements RequestRunner {
     return {assets, configRequests};
   }
 
-  updateGraph(requestNode, result, graph) {
+  onComplete(requestNode, result, graph) {
+    this.assetGraph.resolveAssetGroup(requestNode.value.request, result.assets);
+
     let {assets, configRequests} = result;
 
     graph.invalidateOnFileUpdate(
@@ -177,25 +204,30 @@ export class AssetRequestRunner implements RequestRunner {
 
 export class DepPathRequestRunner implements RequestRunner {
   resolverRunner: ResolverRunner;
+  assetGraph: AssetGraph;
 
   constructor({
     options,
-    config
+    config,
+    assetGraph
   }: {|
     options: ParcelOptions,
-    config: ParcelConfig
+    config: ParcelConfig,
+    assetGraph: AssetGraph
   |}) {
     this.resolverRunner = new ResolverRunner({
       options,
       config
     });
+    this.assetGraph = assetGraph;
   }
 
   run(request) {
     return this.resolverRunner.resolve(request);
   }
 
-  updateGraph(requestNode, result, graph) {
+  onComplete(requestNode, result, graph) {
+    this.assetGraph.resolveDependency(requestNode.value.request, result);
     // TODO: invalidate dep path requests that have failed and a file creation may fulfill the request
     if (result) {
       graph.invalidateOnFileDelete(requestNode, result.filePath);

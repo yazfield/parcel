@@ -98,7 +98,6 @@ export default class PackagerRunner {
     bundleGraph: InternalBundleGraph,
     bundleGraphReference: number
   ) {
-    console.log('WRITING BUNDLE');
     let start = Date.now();
 
     let cacheKey = await this.getCacheKey(bundle, bundleGraph);
@@ -450,9 +449,7 @@ export default class PackagerRunner {
   async writeToCache(cacheKey: string, contents: Blob, map: ?Blob) {
     let contentKey = getContentKey(cacheKey);
 
-    console.log('WRITING TO CACHE', process.pid);
     await this.options.cache.setStream(contentKey, blobToStream(contents));
-    console.log('DONE WRITING TO CACHE');
 
     if (map != null) {
       let mapKey = getMapKey(cacheKey);

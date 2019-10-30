@@ -30,19 +30,10 @@ export default class Handle {
     this.fn = opts.fn;
     this.childId = opts.childId;
     this.workerApi = opts.workerApi;
-    if (process.send == null) {
-      console.log('CREATING HANDLE IN MAIN WITH ID', this.id, process.pid);
-    }
     handleById.set(this.id, this);
-    if (process.send == null) {
-      console.log('MAIN HANDLES AFTER SET', handleById, process.pid);
-    }
   }
 
   dispose() {
-    if (process.send == null) {
-      console.log('DISPOSING OF HANDLE', this.id);
-    }
     handleById.delete(this.id);
   }
 
@@ -61,10 +52,6 @@ export default class Handle {
       } else {
         let handle = handleById.get(opts.id);
         if (!handle) {
-          console.log('NO HANDLE WITH ID FOUND', opts.id, process.pid);
-          if (process.send == null)
-            console.log('HANDLES WERE', handleById, process.pid);
-
           throw new Error(
             'Corresponding Handle was not found. It may have been disposed.'
           );

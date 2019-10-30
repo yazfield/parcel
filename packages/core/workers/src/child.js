@@ -240,7 +240,6 @@ export class Child {
       workerApi: this.workerApi,
       childId: this.childId
     });
-    console.log('CREATING REVERSE HANDLE IN CHILD', handle, process.pid);
     this.handles.set(handle.id, handle);
     return handle;
   }

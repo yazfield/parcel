@@ -359,7 +359,6 @@ export default class WorkerFarm extends EventEmitter {
   }
 
   createReverseHandle(fn: HandleFunction) {
-    console.log('CREATING REVERSE HANDLE');
     let handle = new Handle({fn, workerApi: this.workerApi});
     this.handles.set(handle.id, handle);
     return handle;

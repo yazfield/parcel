@@ -123,7 +123,7 @@ export default class AssetGraph extends Graph<AssetGraphNode> {
 
   addNode(node: AssetGraphNode) {
     this.hash = null;
-    if (INCOMPLETE_TYPES.includes(node.type)) {
+    if (!this.hasNode(node.id) && INCOMPLETE_TYPES.includes(node.type)) {
       this.incompleteNodeIds.add(node.id);
     }
     this.onNodeAdded && this.onNodeAdded(node);
@@ -170,6 +170,7 @@ export default class AssetGraph extends Graph<AssetGraphNode> {
 
   resolveDependency(dependency: Dependency, assetGroup: AssetGroup | null) {
     let depNode = this.nodes.get(dependency.id);
+    this.incompleteNodeIds.delete(depNode.id);
     if (!assetGroup || !depNode) return;
 
     let assetGroupNode = nodeFromAssetGroup(assetGroup);
@@ -203,19 +204,18 @@ export default class AssetGraph extends Graph<AssetGraphNode> {
 
     if (!defer) {
       this.replaceNodesConnectedTo(depNode, [assetGroupNode]);
-      this.incompleteNodeIds.delete(depNode.id);
     }
   }
 
   resolveAssetGroup(assetGroup: AssetGroup, assets: Array<Asset>) {
     let assetGroupNode = nodeFromAssetGroup(assetGroup);
+    this.incompleteNodeIds.delete(assetGroupNode.id);
     if (!this.hasNode(assetGroupNode.id)) {
       return;
     }
 
     let assetNodes = assets.map(asset => nodeFromAsset(asset));
     this.replaceNodesConnectedTo(assetGroupNode, assetNodes);
-    this.incompleteNodeIds.delete(assetGroupNode.id);
 
     for (let assetNode of assetNodes) {
       let depNodes = [];

@@ -93,7 +93,7 @@ describe('babel', function() {
     assert(file.includes('hello there'));
   });
 
-  it.only('should compile with babel with default engines if no config', async function() {
+  it('should compile with babel with default engines if no config', async function() {
     await bundle(path.join(__dirname, '/integration/babel-default/index.js'), {
       mode: 'production',
       defaultEngines: null,
@@ -374,7 +374,6 @@ describe('babel', function() {
       await fs.rimraf(distDir);
     });
 
-    // TODO
     it('should rebuild when .babelrc changes', async function() {
       let differentPath = path.join(inputDir, 'differentConfig');
       let configPath = path.join(inputDir, '.babelrc');
@@ -405,8 +404,6 @@ describe('babel', function() {
     });
 
     it('should invalidate babel.config.js across runs', async function() {
-      //! This test is only passing because the graphs are not being reused, manually fail for now
-      assert(false, 'THIS TEST SHOULD FAIL');
       let dateRe = /return (\d+);/;
 
       let fixtureDir = path.join(__dirname, '/integration/babel-config-js');
@@ -448,8 +445,6 @@ describe('babel', function() {
     });
 
     it('should invalidate when babel plugins are upgraded across runs', async function() {
-      //! This test is only passing because the graphs are not being reused, manually fail for now
-      assert(false);
       let fixtureDir = path.join(
         __dirname,
         '/integration/babel-plugin-upgrade'

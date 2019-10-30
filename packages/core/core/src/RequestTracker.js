@@ -70,7 +70,7 @@ export class RequestGraph extends Graph<
 
   // $FlowFixMe
   static deserialize(opts: SerializedRequestGraph) {
-    let deserialized = new RequestGraph();
+    let deserialized = new RequestGraph(opts);
     deserialized.invalidNodeIds = opts.invalidNodeIds;
     deserialized.globNodeIds = opts.globNodeIds;
     deserialized.unpredicatableNodeIds = opts.unpredicatableNodeIds;
@@ -279,10 +279,7 @@ export default class RequestTracker<TRequest> {
   async runRequest(
     type: string,
     request: HasTypeAndId,
-    {
-      signal,
-      parentRequest
-    }: {|signal: ?AbortSignal, parentRequest?: HasTypeAndId|} = {}
+    {signal}: {|signal: ?AbortSignal|} = {}
   ) {
     let requestNode = this.requestGraph.getNode(request.id);
 
@@ -305,8 +302,7 @@ export default class RequestTracker<TRequest> {
 
     // This function should clear invalid/incomplete status and add result to the value
     this.requestGraph.completeRequest(requestNode);
-
-    await runner.updateGraph(requestNode, result, this.requestGraph);
+    await runner.onComplete(requestNode, result, this.requestGraph);
 
     return result;
   }
@@ -319,5 +315,19 @@ export default class RequestTracker<TRequest> {
 
   respondToFSEvents(events: Array<Event>): boolean {
     return this.requestGraph.respondToFSEvents(events);
+  }
+
+  hasInvalidRequests() {
+    return this.requestGraph.invalidNodeIds.size > 0;
+  }
+
+  getInvalidNodes() {
+    let invalidNodes = [];
+    for (let id of this.requestGraph.invalidNodeIds) {
+      let node = this.requestGraph.getNode(id);
+      nullthrows(node);
+      invalidNodes.push(node);
+    }
+    return invalidNodes;
   }
 }
