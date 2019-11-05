@@ -49,19 +49,24 @@ export default class PromiseQueue<T> {
   }
 
   run(): Promise<Array<T>> {
+    console.log('IN RUN');
     if (this._runPromise != null) {
       return this._runPromise;
     }
 
     if (this._queue.length === 0) {
+      console.log('QUEUE EMPTY');
       return Promise.resolve([]);
     }
+
+    console.log('ITEMS IN QUEUE');
 
     let {deferred, promise} = makeDeferredWithPromise();
     this._deferred = deferred;
     this._runPromise = promise;
 
     while (this._queue.length && this._numRunning < this._maxConcurrent) {
+      console.log('IN QUEUE LOOP');
       this._next();
     }
 
