@@ -15,6 +15,8 @@ import resolveOptions from './resolveOptions';
 import {ValueEmitter} from '@parcel/events';
 import {PromiseQueue} from '@parcel/utils';
 
+import fs from 'fs';
+
 export default class Parcel {
   #assetGraphBuilder; // AssetGraphBuilder
   #runtimesAssetGraphBuilder; // AssetGraphBuilder
@@ -127,25 +129,14 @@ export default class Parcel {
     invariant(this.#watcherSubscription == null);
 
     let resolvedOptions = nullthrows(this.#resolvedOptions);
-    let vcsDirs = ['.git', '.hg'].map(dir =>
-      path.join(resolvedOptions.projectRoot, dir)
-    );
-    let ignore = [resolvedOptions.cacheDir, ...vcsDirs];
-    let opts = {ignore};
 
-    return resolvedOptions.inputFS.watch(
+    fs.watch(
       resolvedOptions.projectRoot,
-      (err, _events) => {
-        let events = _events.filter(e => !e.path.includes('.cache'));
-        console.log('WITNESSED EVENTS', events);
-
-        if (err) {
-          this.#watchEvents.emit({error: err});
-          return;
-        }
-
-        let isInvalid = true; //this.#assetGraphBuilder.respondToFSEvents(events);
-        if (isInvalid && this.#watchQueue.getNumWaiting() === 0) {
+      {recursive: true},
+      (eventType, fileName) => {
+        let shouldRun = !fileName.includes('.parcel-cache');
+        if (shouldRun && this.#watchQueue.getNumWaiting() === 0) {
+          console.log('WITNESSED EVENT', eventType, fileName);
           if (this.#watchAbortController) {
             this.#watchAbortController.abort();
           }
@@ -155,8 +146,8 @@ export default class Parcel {
           console.log('ADDED TO QUEUE');
           this.#watchQueue.run();
         }
-      },
-      opts
+      }
     );
+    return {unsubscribe: () => null};
   }
 }
