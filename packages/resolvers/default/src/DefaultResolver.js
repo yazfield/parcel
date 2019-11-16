@@ -206,12 +206,33 @@ class NodeResolver {
       // ignore
     }
 
+    if (resolved === undefined && process.versions.pnp != null) {
+      try {
+        let [moduleName, subPath] = this.getModuleParts(filename);
+        // $FlowFixMe - injected at runtime
+        let res = require('pnpapi').resolveToUnqualified(
+          moduleName,
+          path.join(process.cwd(), 'index.js')
+        );
+
+        resolved = {
+          moduleName,
+          subPath,
+          moduleDir: res,
+          filePath: path.join(res, subPath || '')
+        };
+      } catch (e) {
+        console.log(e);
+        // ignore
+      }
+    }
+
     // If we couldn't resolve the node_modules path, just return the module name info
     if (resolved === undefined) {
-      let parts = this.getModuleParts(filename);
+      let [moduleName, subPath] = this.getModuleParts(filename);
       resolved = {
-        moduleName: parts[0],
-        subPath: parts[1]
+        moduleName,
+        subPath
       };
     }
 
@@ -224,8 +245,8 @@ class NodeResolver {
     }
 
     if (Array.isArray(includeNodeModules)) {
-      let parts = this.getModuleParts(name);
-      return includeNodeModules.includes(parts[0]);
+      let [moduleName] = this.getModuleParts(name);
+      return includeNodeModules.includes(moduleName);
     }
 
     return true;
@@ -575,11 +596,11 @@ class NodeResolver {
       alias = await this.lookupAlias(aliases, filename, dir);
       if (alias == null) {
         // If it didn't match, try only the module name.
-        let parts = this.getModuleParts(filename);
-        alias = await this.lookupAlias(aliases, parts[0], dir);
-        if (typeof alias === 'string') {
+        let [moduleName, subPath] = this.getModuleParts(filename);
+        alias = await this.lookupAlias(aliases, moduleName, dir);
+        if (typeof alias === 'string' && subPath) {
           // Append the filename back onto the aliased module.
-          alias = path.join(alias, ...parts.slice(1));
+          alias = path.join(alias, subPath);
         }
       }
     }
@@ -645,13 +666,18 @@ class NodeResolver {
     return this.resolveAliases(filename, env, pkg);
   }
 
-  getModuleParts(name) {
-    let parts = path.normalize(name).split(path.sep);
-    if (parts[0].charAt(0) === '@') {
-      // Scoped module (e.g. @scope/module). Merge the first two parts back together.
-      parts.splice(0, 2, `${parts[0]}/${parts[1]}`);
+  getModuleParts(name): [string, ?string] {
+    let splitOn = name.indexOf('/');
+    if (splitOn < 0) {
+      return [name, undefined];
+    }
+    if (name.charAt(0) === '@') {
+      splitOn = name.indexOf('/', splitOn + 1);
     }
 
-    return parts;
+    return [
+      name.substring(0, splitOn),
+      name.substring(splitOn + 1) || undefined
+    ];
   }
 }

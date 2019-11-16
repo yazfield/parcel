@@ -10,6 +10,7 @@ require('@babel/register')({
     // the plugin to be loaded to compile the plugin.
     path.resolve(__dirname, '../../core/integration-tests/test/integration')
   ],
+  only: [path.join(__dirname, '../../..')],
   presets: [parcelBabelPreset],
   plugins: [require('./babel-plugin-module-translate')]
 });

@@ -7,6 +7,7 @@ import type {FileSystem} from '@parcel/fs';
 // $FlowFixMe TODO: Type promisify
 import promisify from './promisify';
 import _resolve from 'resolve';
+import path from 'path';
 
 const resolveAsync = promisify(_resolve);
 
@@ -15,11 +16,78 @@ export type ResolveResult = {|
   pkg?: ?PackageJSON
 |};
 
+async function findPackage(fs: FileSystem, from: string) {
+  // Find the nearest package.json file within the current node_modules folder
+  let root = path.parse(from).root;
+  let dir = from;
+  while (dir !== root && path.basename(dir) !== 'node_modules') {
+    let file = path.join(dir, 'package.json');
+    if (await fs.exists(file)) {
+      return file;
+    }
+
+    dir = path.dirname(dir);
+  }
+
+  return null;
+}
+
+function findPackageSync(fs: FileSystem, from: string) {
+  // Find the nearest package.json file within the current node_modules folder
+  let root = path.parse(from).root;
+  let dir = from;
+  while (dir !== root && path.basename(dir) !== 'node_modules') {
+    let file = path.join(dir, 'package.json');
+    if (fs.existsSync(file)) {
+      return file;
+    }
+
+    dir = path.dirname(dir);
+  }
+
+  return null;
+}
+
 export async function resolve(
   fs: FileSystem,
   id: string,
   opts?: ResolveOptions
 ): Promise<ResolveResult> {
+  if (process.versions.pnp != null) {
+    if (
+      process.env.PARCEL_BUILD_ENV === 'production' ||
+      (!id.startsWith('@parcel') || id.startsWith('@parcel/watcher'))
+    ) {
+      try {
+        let basedir = opts?.basedir;
+        // $FlowFixMe - injected" at runtime
+        let res = require('pnpapi').resolveRequest(
+          id,
+          basedir != null ? `${basedir}/` : null,
+          {
+            extensions: opts?.extensions,
+            considerBuiltins: true
+          }
+        );
+
+        if (!res) {
+          // builtin
+          return {resolved: id};
+        }
+
+        let pkgFile = await findPackage(fs, path.dirname(res));
+        let pkg = null;
+        if (pkgFile != null) {
+          pkg = JSON.parse(await fs.readFile(pkgFile, 'utf8'));
+        }
+
+        if (res) {
+          return {resolved: res, pkg};
+        }
+      } catch (_) {}
+    }
+  }
+
   if (process.env.PARCEL_BUILD_ENV !== 'production') {
     // $FlowFixMe
     opts = opts || {};
@@ -79,6 +147,40 @@ export function resolveSync(
   id: string,
   opts?: ResolveOptions
 ): ResolveResult {
+  if (process.versions.pnp != null) {
+    if (
+      process.env.PARCEL_BUILD_ENV === 'production' ||
+      (!id.startsWith('@parcel') || id.startsWith('@parcel/watcher'))
+    ) {
+      try {
+        let basedir = opts?.basedir;
+        // $FlowFixMe - injected" at runtime
+        let res = require('pnpapi').resolveRequest(
+          id,
+          basedir != null ? `${basedir}/` : null,
+          {
+            extensions: opts?.extensions,
+            considerBuiltins: true
+          }
+        );
+
+        if (!res) {
+          // builtin
+          return {resolved: id};
+        }
+        let pkgFile = findPackageSync(fs, path.dirname(res));
+        let pkg = null;
+        if (pkgFile != null) {
+          pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
+        }
+
+        if (res) {
+          return {resolved: res, pkg};
+        }
+      } catch (_) {}
+    }
+  }
+
   if (process.env.PARCEL_BUILD_ENV !== 'production') {
     // $FlowFixMe
     opts = opts || {};
