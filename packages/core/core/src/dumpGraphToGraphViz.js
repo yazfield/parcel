@@ -50,6 +50,7 @@ export default async function dumpGraphToGraphViz(
       if (node.value.isEntry) parts.push('entry');
       if (node.value.isAsync) parts.push('async');
       if (node.value.isOptional) parts.push('optional');
+      if (node.value.isWeak) parts.push('weak');
       if (parts.length) label += ' (' + parts.join(', ') + ')';
       if (node.value.env) label += ` (${getEnvDescription(node.value.env)})`;
     } else if (node.type === 'asset') {

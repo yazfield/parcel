@@ -323,7 +323,10 @@ export function link({
             path.replaceWith(
               THROW_TEMPLATE({MODULE: t.stringLiteral(source.value)})
             );
-          } else if (dep.isWeak) {
+          } else if (
+            dep.isWeak &&
+            !bundle.env.isLibrary /* TODO dep.wasDeferred*/
+          ) {
             path.remove();
           } else {
             let name = addExternalModule(path, dep);
