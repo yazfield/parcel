@@ -281,6 +281,8 @@ export function generateExports(
       )) {
         if (symbol) {
           symbol = replacements.get(symbol) || symbol;
+        } else {
+          throw new Error('Some asset was incorrectly deferred?');
         }
 
         // If there is an existing binding with the exported name (e.g. an import),
