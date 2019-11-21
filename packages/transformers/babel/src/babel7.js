@@ -1,6 +1,7 @@
 // @flow
 
 import type {MutableAsset, AST, PluginOptions} from '@parcel/types';
+import * as bundledBabelCore from '@babel/core';
 
 import packageJson from '../package.json';
 import invariant from 'assert';
@@ -17,7 +18,7 @@ export default async function babel7(
   // If this is an internally generated config, use our internal @babel/core,
   // otherwise require a local version from the package we're compiling.
   let babel = babelOptions.internal
-    ? require('@babel/core')
+    ? bundledBabelCore
     : await options.packageManager.require('@babel/core', asset.filePath);
 
   let config = {

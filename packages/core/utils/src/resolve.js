@@ -53,9 +53,10 @@ export async function resolve(
   id: string,
   opts?: ResolveOptions
 ): Promise<ResolveResult> {
-  if (process.versions.pnp != null) {
+  if (process.env.PARCEL_BUILD_ENV !== 'production') {
+    // Yarn patches resolve automatically in a non-linked setup
     if (
-      process.env.PARCEL_BUILD_ENV === 'production' ||
+      process.versions.pnp != null &&
       (!id.startsWith('@parcel') || id.startsWith('@parcel/watcher'))
     ) {
       try {
@@ -86,9 +87,7 @@ export async function resolve(
         }
       } catch (_) {}
     }
-  }
 
-  if (process.env.PARCEL_BUILD_ENV !== 'production') {
     // $FlowFixMe
     opts = opts || {};
     // $FlowFixMe
@@ -147,9 +146,10 @@ export function resolveSync(
   id: string,
   opts?: ResolveOptions
 ): ResolveResult {
-  if (process.versions.pnp != null) {
+  if (process.env.PARCEL_BUILD_ENV !== 'production') {
+    // Yarn patches resolve automatically in a non-linked setup
     if (
-      process.env.PARCEL_BUILD_ENV === 'production' ||
+      process.versions.pnp != null &&
       (!id.startsWith('@parcel') || id.startsWith('@parcel/watcher'))
     ) {
       try {
@@ -168,6 +168,7 @@ export function resolveSync(
           // builtin
           return {resolved: id};
         }
+
         let pkgFile = findPackageSync(fs, path.dirname(res));
         let pkg = null;
         if (pkgFile != null) {
@@ -179,9 +180,7 @@ export function resolveSync(
         }
       } catch (_) {}
     }
-  }
 
-  if (process.env.PARCEL_BUILD_ENV !== 'production') {
     // $FlowFixMe
     opts = opts || {};
     // $FlowFixMe
