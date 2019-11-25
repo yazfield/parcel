@@ -222,7 +222,6 @@ class NodeResolver {
           filePath: path.join(res, subPath || '')
         };
       } catch (e) {
-        console.log(e);
         // ignore
       }
     }

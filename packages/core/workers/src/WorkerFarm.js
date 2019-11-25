@@ -175,9 +175,9 @@ export default class WorkerFarm extends EventEmitter {
     // Handle ipc errors
     if (error.code === 'ERR_IPC_CHANNEL_CLOSED') {
       return this.stopWorker(worker);
+    } else {
+      logger.error(error, '@parcel/workers');
     }
-    //TODO do this properly
-    console.error(error);
   }
 
   startChild() {

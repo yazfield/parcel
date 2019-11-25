@@ -5,27 +5,20 @@ import {bundle, run, assertBundles} from '@parcel/test-utils';
 
 describe('pnp', function() {
   it('should defer to the pnp resolution when needed', async function() {
-    const resolve = request => {
-      if (request === `testmodule`) {
-        return path.join(__dirname, '/integration/pnp_require/pnp/testmodule');
-      } else {
-        // The plugins from the parcel config are also resolved through this function
-        return require.resolve(request);
-      }
-    };
+    let dir = path.join(__dirname, '/integration/pnp-require');
 
-    const pnpapi = {resolveToUnqualified: resolve, resolveRequest: resolve};
-
-    const origPnpVersion = process.versions.pnp;
+    let origPnpVersion = process.versions.pnp;
     process.versions.pnp = 42;
 
-    const origModuleLoad = Module._load;
-    Module._load = (name, ...args) =>
-      name === `pnpapi` ? pnpapi : origModuleLoad(name, ...args);
+    let origModuleResolveFilename = Module._resolveFilename;
+    Module._resolveFilename = (name, ...args) =>
+      name === 'pnpapi'
+        ? path.join(dir, '.pnp.js')
+        : origModuleResolveFilename(name, ...args);
 
     try {
       let b = await bundle(
-        path.join(__dirname, '/integration/pnp_require/index.js')
+        path.join(__dirname, '/integration/pnp-require/index.js')
       );
 
       await assertBundles(b, [
@@ -39,7 +32,7 @@ describe('pnp', function() {
       assert.equal(output(), 3);
     } finally {
       process.versions.pnp = origPnpVersion;
-      Module._load = origModuleLoad;
+      Module._resolveFilename = origModuleResolveFilename;
     }
   });
 });

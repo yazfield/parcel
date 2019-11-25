@@ -85,7 +85,9 @@ export async function resolve(
         if (res) {
           return {resolved: res, pkg};
         }
-      } catch (_) {}
+      } catch (_) {
+        // NOOP
+      }
     }
 
     // $FlowFixMe
@@ -99,6 +101,11 @@ export async function resolve(
       }
       return pkg;
     };
+  }
+
+  if (id === 'pnpapi') {
+    // the resolve package doesn't recognize pnpapi as a builtin
+    return {resolved: require.resolve('pnpapi')};
   }
 
   let res = await resolveAsync(id, {
@@ -178,7 +185,9 @@ export function resolveSync(
         if (res) {
           return {resolved: res, pkg};
         }
-      } catch (_) {}
+      } catch (_) {
+        // NOOP
+      }
     }
 
     // $FlowFixMe
@@ -192,6 +201,11 @@ export function resolveSync(
       }
       return pkg;
     };
+  }
+
+  if (id === 'pnpapi') {
+    // the resolve package doesn't recognize pnpapi as a builtin
+    return {resolved: require.resolve('pnpapi')};
   }
 
   // $FlowFixMe
