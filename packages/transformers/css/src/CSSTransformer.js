@@ -42,8 +42,8 @@ export default new Transformer({
       version: '7.0.0',
       isDirty: false,
       program: postcss.parse(code, {
-        from: asset.filePath
-      })
+        from: asset.filePath,
+      }),
     };
   },
 
@@ -92,8 +92,8 @@ export default new Transformer({
         // Offset by 8 as it does not include `@import `
         loc: createDependencyLocation(rule.source.start, moduleSpecifier, 0, 8),
         meta: {
-          media
-        }
+          media,
+        },
       };
       asset.addDependency(dep);
       rule.remove();
@@ -116,8 +116,8 @@ export default new Transformer({
             node.nodes[0].value = asset.addURLDependency(node.nodes[0].value, {
               loc: createDependencyLocation(
                 decl.source.start,
-                node.nodes[0].value
-              )
+                node.nodes[0].value,
+              ),
             });
             isDirty = true;
           }
@@ -143,7 +143,7 @@ export default new Transformer({
     }
 
     return {
-      code
+      code,
     };
-  }
+  },
 });

@@ -13,7 +13,7 @@ import {
   mergeConfigs,
   resolveExtends,
   readAndProcess,
-  resolveParcelConfig
+  resolveParcelConfig,
 } from '../src/loadParcelConfig';
 import {DEFAULT_OPTIONS} from './utils';
 
@@ -25,7 +25,7 @@ describe('loadParcelConfig', () => {
           '@parcel/foo-bar',
           'transform',
           'transforms',
-          '.parcelrc'
+          '.parcelrc',
         );
       }, /Official parcel transform packages must be named according to "@parcel\/transform-{name}" but got "@parcel\/foo-bar" in .parcelrc./);
     });
@@ -35,7 +35,7 @@ describe('loadParcelConfig', () => {
         '@parcel/transform-bar',
         'transform',
         'transforms',
-        '.parcelrc'
+        '.parcelrc',
       );
     });
 
@@ -49,7 +49,7 @@ describe('loadParcelConfig', () => {
           'parcel-foo-bar',
           'transform',
           'transforms',
-          '.parcelrc'
+          '.parcelrc',
         );
       }, /Parcel transform packages must be named according to "parcel-transform-{name}" but got "parcel-foo-bar" in .parcelrc./);
     });
@@ -59,7 +59,7 @@ describe('loadParcelConfig', () => {
         'parcel-transform-bar',
         'transform',
         'transforms',
-        '.parcelrc'
+        '.parcelrc',
       );
     });
 
@@ -69,7 +69,7 @@ describe('loadParcelConfig', () => {
           '@test/foo-bar',
           'transform',
           'transforms',
-          '.parcelrc'
+          '.parcelrc',
         );
       }, /Scoped parcel transform packages must be named according to "@test\/parcel-transform-{name}" but got "@test\/foo-bar" in .parcelrc./);
 
@@ -78,7 +78,7 @@ describe('loadParcelConfig', () => {
           '@test/parcel-foo-bar',
           'transform',
           'transforms',
-          '.parcelrc'
+          '.parcelrc',
         );
       }, /Scoped parcel transform packages must be named according to "@test\/parcel-transform-{name}" but got "@test\/parcel-foo-bar" in .parcelrc./);
     });
@@ -88,7 +88,7 @@ describe('loadParcelConfig', () => {
         '@test/parcel-transform-bar',
         'transform',
         'transforms',
-        '.parcelrc'
+        '.parcelrc',
       );
     });
   });
@@ -108,7 +108,7 @@ describe('loadParcelConfig', () => {
           [1, 'foo', 3],
           'resolver',
           'resolvers',
-          '.parcelrc'
+          '.parcelrc',
         );
       }, /"resolvers" elements must be strings in .parcelrc/);
     });
@@ -119,7 +119,7 @@ describe('loadParcelConfig', () => {
           ['parcel-foo-bar'],
           'resolver',
           'resolvers',
-          '.parcelrc'
+          '.parcelrc',
         );
       }, /Parcel resolver packages must be named according to "parcel-resolver-{name}" but got "parcel-foo-bar" in .parcelrc./);
     });
@@ -129,7 +129,7 @@ describe('loadParcelConfig', () => {
         ['parcel-resolver-test'],
         'resolver',
         'resolvers',
-        '.parcelrc'
+        '.parcelrc',
       );
     });
 
@@ -138,7 +138,7 @@ describe('loadParcelConfig', () => {
         ['parcel-resolver-test', '...'],
         'resolver',
         'resolvers',
-        '.parcelrc'
+        '.parcelrc',
       );
     });
   });
@@ -152,7 +152,7 @@ describe('loadParcelConfig', () => {
           () => {},
           'transform',
           'transforms',
-          '.parcelrc'
+          '.parcelrc',
         );
       }, /"transforms" must be an object in .parcelrc/);
     });
@@ -161,23 +161,23 @@ describe('loadParcelConfig', () => {
       assert.throws(() => {
         validateMap(
           {
-            '*.js': ['foo']
+            '*.js': ['foo'],
           },
           validatePipeline,
           'transform',
           'transforms',
-          '.parcelrc'
+          '.parcelrc',
         );
       });
 
       validateMap(
         {
-          '*.js': ['parcel-transform-foo']
+          '*.js': ['parcel-transform-foo'],
         },
         validatePipeline,
         'transform',
         'transforms',
-        '.parcelrc'
+        '.parcelrc',
       );
     });
   });
@@ -222,10 +222,10 @@ describe('loadParcelConfig', () => {
             filePath: '.parcelrc',
             extends: 'parcel-config-foo',
             transforms: {
-              '*.js': ['parcel-invalid-plugin']
-            }
+              '*.js': ['parcel-invalid-plugin'],
+            },
           },
-          '.parcelrc'
+          '.parcelrc',
         );
       });
     });
@@ -236,10 +236,10 @@ describe('loadParcelConfig', () => {
           filePath: '.parcelrc',
           extends: 'parcel-config-foo',
           transforms: {
-            '*.js': ['parcel-transformer-foo']
-          }
+            '*.js': ['parcel-transformer-foo'],
+          },
         },
-        '.parcelrc'
+        '.parcelrc',
       );
     });
 
@@ -257,20 +257,20 @@ describe('loadParcelConfig', () => {
 
     it('should return base if extension is null', () => {
       assert.deepEqual(mergePipelines(['parcel-transform-foo'], null), [
-        'parcel-transform-foo'
+        'parcel-transform-foo',
       ]);
     });
 
     it('should return extension if base is null', () => {
       assert.deepEqual(mergePipelines(null, ['parcel-transform-bar']), [
-        'parcel-transform-bar'
+        'parcel-transform-bar',
       ]);
     });
 
     it('should return extension if there are no spread elements', () => {
       assert.deepEqual(
         mergePipelines(['parcel-transform-foo'], ['parcel-transform-bar']),
-        ['parcel-transform-bar']
+        ['parcel-transform-bar'],
       );
     });
 
@@ -278,9 +278,13 @@ describe('loadParcelConfig', () => {
       assert.deepEqual(
         mergePipelines(
           ['parcel-transform-foo'],
-          ['parcel-transform-bar', '...', 'parcel-transform-baz']
+          ['parcel-transform-bar', '...', 'parcel-transform-baz'],
         ),
-        ['parcel-transform-bar', 'parcel-transform-foo', 'parcel-transform-baz']
+        [
+          'parcel-transform-bar',
+          'parcel-transform-foo',
+          'parcel-transform-baz',
+        ],
       );
     });
 
@@ -288,7 +292,7 @@ describe('loadParcelConfig', () => {
       assert.throws(() => {
         mergePipelines(
           ['parcel-transform-foo'],
-          ['parcel-transform-bar', '...', 'parcel-transform-baz', '...']
+          ['parcel-transform-bar', '...', 'parcel-transform-baz', '...'],
         );
       }, /Only one spread element can be included in a config pipeline/);
     });
@@ -301,31 +305,31 @@ describe('loadParcelConfig', () => {
 
     it('should return base if extension is null', () => {
       assert.deepEqual(mergeMaps({'*.js': 'foo'}, null), {
-        '*.js': 'foo'
+        '*.js': 'foo',
       });
     });
 
     it('should return extension if base is null', () => {
       assert.deepEqual(mergeMaps(null, {'*.js': 'foo'}), {
-        '*.js': 'foo'
+        '*.js': 'foo',
       });
     });
 
     it('should merge the objects', () => {
       assert.deepEqual(
         mergeMaps({'*.css': 'css', '*.js': 'base-js'}, {'*.js': 'ext-js'}),
-        {'*.js': 'ext-js', '*.css': 'css'}
+        {'*.js': 'ext-js', '*.css': 'css'},
       );
     });
 
     it('should ensure that extension properties have a higher precidence than base properties', () => {
       assert.deepEqual(
         mergeMaps({'*.{js,jsx}': 'base-js'}, {'*.js': 'ext-js'}),
-        {'*.js': 'ext-js', '*.{js,jsx}': 'base-js'}
+        {'*.js': 'ext-js', '*.{js,jsx}': 'base-js'},
       );
       assert.deepEqual(
         Object.keys(mergeMaps({'*.{js,jsx}': 'base-js'}, {'*.js': 'ext-js'})),
-        ['*.js', '*.{js,jsx}']
+        ['*.js', '*.{js,jsx}'],
       );
     });
 
@@ -333,7 +337,7 @@ describe('loadParcelConfig', () => {
       let merger = (a, b) => [a, b];
       assert.deepEqual(
         mergeMaps({'*.js': 'base-js'}, {'*.js': 'ext-js'}, merger),
-        {'*.js': ['base-js', 'ext-js']}
+        {'*.js': ['base-js', 'ext-js']},
       );
     });
   });
@@ -346,19 +350,19 @@ describe('loadParcelConfig', () => {
           resolvers: ['parcel-resolver-base'],
           transforms: {
             '*.js': ['parcel-transform-base'],
-            '*.css': ['parcel-transform-css']
+            '*.css': ['parcel-transform-css'],
           },
-          bundler: 'parcel-bundler-base'
+          bundler: 'parcel-bundler-base',
         },
-        DEFAULT_OPTIONS.packageManager
+        DEFAULT_OPTIONS.packageManager,
       );
 
       let ext = {
         filePath: '.parcelrc',
         resolvers: ['parcel-resolver-ext', '...'],
         transforms: {
-          '*.js': ['parcel-transform-ext', '...']
-        }
+          '*.js': ['parcel-transform-ext', '...'],
+        },
       };
 
       let merged = new ParcelConfig(
@@ -367,16 +371,16 @@ describe('loadParcelConfig', () => {
           resolvers: ['parcel-resolver-ext', 'parcel-resolver-base'],
           transforms: {
             '*.js': ['parcel-transform-ext', 'parcel-transform-base'],
-            '*.css': ['parcel-transform-css']
+            '*.css': ['parcel-transform-css'],
           },
           bundler: 'parcel-bundler-base',
           runtimes: {},
           namers: [],
           optimizers: {},
           packagers: {},
-          reporters: []
+          reporters: [],
         },
-        DEFAULT_OPTIONS.packageManager
+        DEFAULT_OPTIONS.packageManager,
       );
 
       assert.deepEqual(mergeConfigs(base, ext), merged);
@@ -388,11 +392,11 @@ describe('loadParcelConfig', () => {
       let resolved = await resolveExtends(
         '../.parcelrc',
         path.join(__dirname, 'fixtures', 'config', 'subfolder', '.parcelrc'),
-        DEFAULT_OPTIONS
+        DEFAULT_OPTIONS,
       );
       assert.equal(
         resolved,
-        path.join(__dirname, 'fixtures', 'config', '.parcelrc')
+        path.join(__dirname, 'fixtures', 'config', '.parcelrc'),
       );
     });
 
@@ -400,7 +404,7 @@ describe('loadParcelConfig', () => {
       let resolved = await resolveExtends(
         '@parcel/config-default',
         path.join(__dirname, 'fixtures', 'config', 'subfolder', '.parcelrc'),
-        DEFAULT_OPTIONS
+        DEFAULT_OPTIONS,
       );
       assert.equal(resolved, require.resolve('@parcel/config-default'));
     });
@@ -411,13 +415,13 @@ describe('loadParcelConfig', () => {
       let defaultConfig = require('@parcel/config-default');
       let {config} = await readAndProcess(
         path.join(__dirname, 'fixtures', 'config', 'subfolder', '.parcelrc'),
-        DEFAULT_OPTIONS
+        DEFAULT_OPTIONS,
       );
 
       assert.deepEqual(config.transforms['*.js'], [
         'parcel-transformer-sub',
         'parcel-transformer-base',
-        '...'
+        '...',
       ]);
       assert(Object.keys(config.transforms).length > 1);
       assert.deepEqual(config.resolvers, defaultConfig.resolvers);
@@ -438,7 +442,7 @@ describe('loadParcelConfig', () => {
     it('should resolve a config if a .parcelrc file is found', async () => {
       let resolved = await resolveParcelConfig(
         path.join(__dirname, 'fixtures', 'config', 'subfolder'),
-        DEFAULT_OPTIONS
+        DEFAULT_OPTIONS,
       );
 
       assert(resolved !== null);

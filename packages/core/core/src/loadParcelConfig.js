@@ -3,7 +3,7 @@ import type {
   FilePath,
   ParcelConfigFile,
   ResolvedParcelConfigFile,
-  PackageName
+  PackageName,
 } from '@parcel/types';
 import type {ParcelOptions} from './types';
 import {resolveConfig, resolve} from '@parcel/utils';
@@ -18,25 +18,25 @@ type ConfigMap<K, V> = {[K]: V, ...};
 
 export default async function loadParcelConfig(
   filePath: FilePath,
-  options: ParcelOptions
+  options: ParcelOptions,
 ) {
   // Resolve plugins from cwd when a config is passed programmatically
   let parcelConfig = options.config
     ? await create(
         {
           ...options.config,
-          resolveFrom: options.inputFS.cwd()
+          resolveFrom: options.inputFS.cwd(),
         },
-        options
+        options,
       )
     : await resolveParcelConfig(filePath, options);
   if (!parcelConfig && options.defaultConfig) {
     parcelConfig = await create(
       {
         ...options.defaultConfig,
-        resolveFrom: options.inputFS.cwd()
+        resolveFrom: options.inputFS.cwd(),
       },
-      options
+      options,
     );
   }
 
@@ -49,10 +49,10 @@ export default async function loadParcelConfig(
 
 export async function resolveParcelConfig(
   filePath: FilePath,
-  options: ParcelOptions
+  options: ParcelOptions,
 ) {
   let configPath = await resolveConfig(options.inputFS, filePath, [
-    '.parcelrc'
+    '.parcelrc',
   ]);
   if (!configPath) {
     return null;
@@ -63,17 +63,17 @@ export async function resolveParcelConfig(
 
 export function create(
   config: ResolvedParcelConfigFile,
-  options: ParcelOptions
+  options: ParcelOptions,
 ) {
   return processConfig(config, config.filePath, options);
 }
 
 export async function readAndProcess(
   configPath: FilePath,
-  options: ParcelOptions
+  options: ParcelOptions,
 ) {
   let config: ParcelConfigFile = parse(
-    await options.inputFS.readFile(configPath)
+    await options.inputFS.readFile(configPath),
   );
   return processConfig(config, configPath, options);
 }
@@ -81,7 +81,7 @@ export async function readAndProcess(
 export async function processConfig(
   configFile: ParcelConfigFile | ResolvedParcelConfigFile,
   filePath: FilePath,
-  options: ParcelOptions
+  options: ParcelOptions,
 ) {
   let resolvedFile: ResolvedParcelConfigFile = {filePath, ...configFile};
   let config = new ParcelConfig(resolvedFile, options.packageManager);
@@ -99,7 +99,7 @@ export async function processConfig(
       extendedFiles.push(resolved);
       let {
         extendedFiles: moreExtendedFiles,
-        config: baseConfig
+        config: baseConfig,
       } = await readAndProcess(resolved, options);
       extendedFiles = extendedFiles.concat(moreExtendedFiles);
       config = mergeConfigs(baseConfig, resolvedFile);
@@ -112,14 +112,14 @@ export async function processConfig(
 export async function resolveExtends(
   ext: string,
   configPath: FilePath,
-  options: ParcelOptions
+  options: ParcelOptions,
 ) {
   if (ext.startsWith('.')) {
     return path.resolve(path.dirname(configPath), ext);
   } else {
     let {resolved} = await resolve(options.inputFS, ext, {
       basedir: path.dirname(configPath),
-      extensions: ['.json']
+      extensions: ['.json'],
     });
     return options.inputFS.realpath(resolved);
   }
@@ -127,7 +127,7 @@ export async function resolveExtends(
 
 export function validateConfigFile(
   config: ParcelConfigFile | ResolvedParcelConfigFile,
-  relativePath: FilePath
+  relativePath: FilePath,
 ) {
   validateNotEmpty(config, relativePath);
   validateExtends(config.extends, relativePath);
@@ -137,14 +137,14 @@ export function validateConfigFile(
     validatePipeline.bind(this),
     'transformer',
     'transforms',
-    relativePath
+    relativePath,
   );
   validateMap(
     config.validators,
     validatePipeline.bind(this),
     'validator',
     'validators',
-    relativePath
+    relativePath,
   );
   validatePackageName(config.bundler, 'bundler', 'bundler', relativePath);
   validatePipeline(config.namers, 'namer', 'namers', relativePath);
@@ -153,48 +153,48 @@ export function validateConfigFile(
     validatePipeline.bind(this),
     'runtime',
     'runtimes',
-    relativePath
+    relativePath,
   );
   validateMap(
     config.packagers,
     validatePackageName.bind(this),
     'packager',
     'packagers',
-    relativePath
+    relativePath,
   );
   validateMap(
     config.optimizers,
     validatePipeline.bind(this),
     'optimizer',
     'optimizers',
-    relativePath
+    relativePath,
   );
   validatePipeline(config.reporters, 'reporter', 'reporters', relativePath);
 }
 
 export function validateNotEmpty(
   config: ParcelConfigFile | ResolvedParcelConfigFile,
-  relativePath: FilePath
+  relativePath: FilePath,
 ) {
   assert.notDeepStrictEqual(config, {}, `${relativePath} can't be empty`);
 }
 
 export function validateExtends(
   exts: string | Array<string> | void,
-  relativePath: FilePath
+  relativePath: FilePath,
 ) {
   if (Array.isArray(exts)) {
     for (let ext of exts) {
       assert(
         typeof ext === 'string',
-        `"extends" elements must be strings in ${relativePath}`
+        `"extends" elements must be strings in ${relativePath}`,
       );
       validateExtendsConfig(ext, relativePath);
     }
   } else if (exts) {
     assert(
       typeof exts === 'string',
-      `"extends" must be a string or array of strings in ${relativePath}`
+      `"extends" must be a string or array of strings in ${relativePath}`,
     );
     validateExtendsConfig(exts, relativePath);
   }
@@ -210,7 +210,7 @@ export function validatePipeline(
   pipeline: ?Pipeline,
   pluginType: string,
   key: string,
-  relativePath: FilePath
+  relativePath: FilePath,
 ) {
   if (!pipeline) {
     return;
@@ -218,11 +218,11 @@ export function validatePipeline(
 
   assert(
     Array.isArray(pipeline),
-    `"${key}" must be an array in ${relativePath}`
+    `"${key}" must be an array in ${relativePath}`,
   );
   assert(
     pipeline.every(pkg => typeof pkg === 'string'),
-    `"${key}" elements must be strings in ${relativePath}`
+    `"${key}" elements must be strings in ${relativePath}`,
   );
   for (let pkg of pipeline) {
     if (pkg !== '...') {
@@ -236,7 +236,7 @@ export function validateMap<K, V>(
   validator: (v: V, p: string, k: string, p: FilePath) => void,
   pluginType: string,
   configKey: string,
-  relativePath: FilePath
+  relativePath: FilePath,
 ) {
   if (!globMap) {
     return;
@@ -244,7 +244,7 @@ export function validateMap<K, V>(
 
   assert(
     typeof globMap === 'object',
-    `"${configKey}" must be an object in ${relativePath}`
+    `"${configKey}" must be an object in ${relativePath}`,
   );
   for (let k in globMap) {
     // Flow doesn't correctly infer the type. See https://github.com/facebook/flow/issues/1736.
@@ -259,7 +259,7 @@ export function validatePackageName(
   pkg: ?PackageName,
   pluginType: string,
   key: string,
-  relativePath: FilePath
+  relativePath: FilePath,
 ) {
   if (!pkg) {
     return;
@@ -267,31 +267,31 @@ export function validatePackageName(
 
   assert(
     typeof pkg === 'string',
-    `"${key}" must be a string in ${relativePath}`
+    `"${key}" must be a string in ${relativePath}`,
   );
 
   if (pkg.startsWith('@parcel')) {
     assert(
       pkg.replace(/^@parcel\//, '').startsWith(`${pluginType}-`),
-      `Official parcel ${pluginType} packages must be named according to "@parcel/${pluginType}-{name}" but got "${pkg}" in ${relativePath}.`
+      `Official parcel ${pluginType} packages must be named according to "@parcel/${pluginType}-{name}" but got "${pkg}" in ${relativePath}.`,
     );
   } else if (pkg.startsWith('@')) {
     let [scope, name] = pkg.split('/');
     assert(
       name.startsWith(`parcel-${pluginType}-`),
-      `Scoped parcel ${pluginType} packages must be named according to "${scope}/parcel-${pluginType}-{name}" but got "${pkg}" in ${relativePath}.`
+      `Scoped parcel ${pluginType} packages must be named according to "${scope}/parcel-${pluginType}-{name}" but got "${pkg}" in ${relativePath}.`,
     );
   } else {
     assert(
       pkg.startsWith(`parcel-${pluginType}-`),
-      `Parcel ${pluginType} packages must be named according to "parcel-${pluginType}-{name}" but got "${pkg}" in ${relativePath}.`
+      `Parcel ${pluginType} packages must be named according to "parcel-${pluginType}-{name}" but got "${pkg}" in ${relativePath}.`,
     );
   }
 }
 
 export function mergeConfigs(
   base: ParcelConfig,
-  ext: ResolvedParcelConfigFile
+  ext: ResolvedParcelConfigFile,
 ): ParcelConfig {
   return new ParcelConfig(
     {
@@ -304,9 +304,9 @@ export function mergeConfigs(
       runtimes: mergeMaps(base.runtimes, ext.runtimes),
       packagers: mergeMaps(base.packagers, ext.packagers),
       optimizers: mergeMaps(base.optimizers, ext.optimizers, mergePipelines),
-      reporters: mergePipelines(base.reporters, ext.reporters)
+      reporters: mergePipelines(base.reporters, ext.reporters),
     },
-    base.packageManager
+    base.packageManager,
   );
 }
 
@@ -321,14 +321,14 @@ export function mergePipelines(base: ?Pipeline, ext: ?Pipeline): Pipeline {
     if (spreadIndex >= 0) {
       if (ext.filter(v => v === '...').length > 1) {
         throw new Error(
-          'Only one spread element can be included in a config pipeline'
+          'Only one spread element can be included in a config pipeline',
         );
       }
 
       ext = [
         ...ext.slice(0, spreadIndex),
         ...(base || []),
-        ...ext.slice(spreadIndex + 1)
+        ...ext.slice(spreadIndex + 1),
       ];
     }
   }
@@ -339,7 +339,7 @@ export function mergePipelines(base: ?Pipeline, ext: ?Pipeline): Pipeline {
 export function mergeMaps<K, V>(
   base: ?ConfigMap<K, V>,
   ext: ?ConfigMap<K, V>,
-  merger?: (a: V, b: V) => V
+  merger?: (a: V, b: V) => V,
 ): ConfigMap<K, V> {
   if (!ext) {
     return base || {};
